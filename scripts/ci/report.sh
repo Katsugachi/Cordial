@@ -18,12 +18,13 @@ if [ "$status" -ne 0 ]; then
 
   annotated=0
 
-  # Rustc/clippy diagnostics first: they carry the real message and its location.
+  # Rustc/clippy diagnostics first, with the lines that follow each one: the
+  # location is useful, but "expected X, found Y" is what actually explains it.
   while IFS= read -r line; do
     printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g')"
     annotated=$((annotated + 1))
-    [ "$annotated" -ge 24 ] && break
-  done < <(grep -E '^(error|warning)(\[|:)|^ *--> |^error: could not compile' "$log" | head -24 || true)
+    [ "$annotated" -ge 36 ] && break
+  done < <(grep -A 4 -E '^error(\[|:)|^error: could not compile' "$log" | head -36 || true)
 
   # Then the tail, which catches failures without diagnostics (killed builds).
   if [ "$annotated" -lt 40 ]; then

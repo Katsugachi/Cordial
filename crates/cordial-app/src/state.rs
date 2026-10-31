@@ -115,7 +115,7 @@ impl Core {
             CoreError::Inference("the inference worker stopped while loading".to_string())
         })??;
         self.engine = Some(Engine {
-            backend,
+            backend: Backend::Llama(backend),
             paths: ModelPaths { weights, projector },
             info,
         });
