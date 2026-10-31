@@ -156,7 +156,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
-            --exact answers_a_plain_factual_question_briefly 2>&1 | tee /tmp/live-load.log
+            --exact answers_a_plain_factual_question_briefly 2>&1 | tee -a /tmp/live.log
       - name: Full suite
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
@@ -169,15 +169,17 @@ jobs:
         run: |
           # Job logs are not always downloadable, so the interesting part of the
           # run is republished as annotations and committed as a transcript.
-          for log in /tmp/live-load.log /tmp/live.log; do
-            [ -f "$log" ] || continue
-            echo "==== $log ===="
-            grep -E "MODEL BOOT FAILED|MODEL LOAD FAILED|panicked at|assertion|left:|right:|FAILED|test result|Error:|loaded " "$log" \
-              | head -24 \
+          log=/tmp/live.log
+          if [ -f "$log" ]; then
+            echo "==== questions and answers ===="
+            # The Q/A blocks and the assertion, so a failure is readable without
+            # the job log.
+            grep -E "^--- |^\(|^> |MODEL BOOT FAILED|MODEL LOAD FAILED|panicked at|assertion|left:|right:|test result" "$log" \
+              | head -40 \
               | while IFS= read -r line; do
                   printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
                 done
-          done
+          fi
           python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
           git config user.name "cordial-live"
           git config user.email "actions@users.noreply.github.com"
