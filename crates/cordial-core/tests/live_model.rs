@@ -171,12 +171,23 @@ impl Live {
         let (sink, mut receiver) = EventSink::channel();
         let drain = tokio::spawn(async move {
             let mut text = String::new();
+            let mut diagnostics: Vec<String> = Vec::new();
             while let Some(event) = receiver.recv().await {
-                if let cordial_core::AgentEvent::TextDelta { text: delta, .. } = event {
-                    text.push_str(&delta);
+                match event {
+                    cordial_core::AgentEvent::TextDelta { text: delta, .. } => text.push_str(&delta),
+                    cordial_core::AgentEvent::Error { message, .. } => {
+                        diagnostics.push(format!("error: {message}"))
+                    }
+                    cordial_core::AgentEvent::Notice { message } => {
+                        diagnostics.push(format!("notice: {message}"))
+                    }
+                    cordial_core::AgentEvent::ToolCallFinished { name, summary, ok, .. } => {
+                        diagnostics.push(format!("tool {name} ok={ok}: {summary}"))
+                    }
+                    _ => {}
                 }
             }
-            text
+            (text, diagnostics)
         });
 
         let config = AgentConfig {
@@ -205,7 +216,10 @@ impl Live {
         let result = agent.run(&mut session, text.to_string(), attachments).await;
         drop(agent);
         drop(sink);
-        let streamed = drain.await.unwrap_or_default();
+        let (streamed, diagnostics) = drain.await.unwrap_or_default();
+        for line in &diagnostics {
+            eprintln!("  · {line}");
+        }
         let stop = result
             .map(|r| format!("{:?}", r.stop))
             .unwrap_or_else(|e| format!("error: {e}"));
