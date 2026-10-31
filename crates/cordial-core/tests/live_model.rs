@@ -29,6 +29,9 @@ struct Live {
     backend: Backend,
     runtime: ToolRuntime,
     workspace: PathBuf,
+    // Kept alive for the whole test so the workspace and scratch folders are
+    // not deleted while the agent is still using them.
+    _workspace_dir: tempdir::TempDir,
     _scratch: tempdir::TempDir,
 }
 
@@ -136,6 +139,7 @@ impl Live {
             backend: Backend::Llama(backend),
             runtime,
             workspace: workspace.path().to_path_buf(),
+            _workspace_dir: workspace,
             _scratch: scratch,
         })
     }

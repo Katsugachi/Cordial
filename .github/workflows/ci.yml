@@ -17,17 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  formatting:
-    name: rustfmt
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Check formatting
-        run: scripts/ci/report.sh cargo fmt --all -- --check
+  # Formatting is applied by .github/workflows/format.yml rather than gated
+  # here, so a contributor without a local rustfmt of the matching toolchain is
+  # not blocked by whitespace.
 
   rust:
     name: Rust (clippy, tests)

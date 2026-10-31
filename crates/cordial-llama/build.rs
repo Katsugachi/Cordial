@@ -390,17 +390,22 @@ fn link(build_dir: &Path, is_windows: bool, is_apple: bool, is_msvc: bool) {
         // OpenMP runtime used by ggml-cpu, plus sockets/user env for symbols
         // that static ggml objects reference even when unused at runtime.
         if is_msvc {
-            println!("cargo:rustc-link-lib=static=vcomp");
+            // ggml-cpu compiles with /openmp on MSVC, which needs the vcomp
+            // runtime (an import library, not a static archive).
+            println!("cargo:rustc-link-lib=vcomp");
         } else {
-            println!("cargo:rustc-link-lib=static=gomp");
+            println!("cargo:rustc-link-lib=gomp");
         }
         println!("cargo:rustc-link-lib=ws2_32");
         println!("cargo:rustc-link-lib=userenv");
         println!("cargo:rustc-link-lib=bcrypt");
+        println!("cargo:rustc-link-lib=advapi32");
     } else if !is_apple {
-        // ggml-cpu enables OpenMP when the toolchain provides it.
-        println!("cargo:rustc-link-lib=static=gomp");
+        // ggml-cpu enables OpenMP when the toolchain provides it, and ggml uses
+        // libm and dlopen directly.
+        println!("cargo:rustc-link-lib=gomp");
         println!("cargo:rustc-link-lib=dylib=dl");
+        println!("cargo:rustc-link-lib=dylib=m");
     }
 
     if is_apple {
