@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use cordial_core::backend::{engine_options, Backend, EngineInfo, LlamaBackend};
 use cordial_core::events::{AgentEvent, EventSink};
-use cordial_core::model_manager::{self, ModelManager, ModelPaths, ModelStatus};
+use cordial_core::model_manager::{self, ModelManager, ModelPaths};
 use cordial_core::permissions::PermissionPolicy;
 use cordial_core::session::{Attachment, Session, SessionStore};
 use cordial_core::settings::Settings;
@@ -415,10 +415,4 @@ pub fn write_settings(paths: &Paths, settings: &Settings) -> Result<(), CoreErro
     std::fs::write(&tmp, json)?;
     std::fs::rename(&tmp, &file)?;
     Ok(())
-}
-
-/// Keeps the model-manager status helper available to callers that only have a
-/// `ModelManager` handle.
-pub fn manager_status(manager: &ModelManager) -> ModelStatus {
-    manager.status()
 }

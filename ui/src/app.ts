@@ -458,6 +458,16 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
 
       render();
       await bridge.onEvent(handle);
+
+      // First run: fetch the default Q4_K_M weights and projector without
+      // waiting for a click. The button stays as a retry path.
+      const needsDownload = state.phase === "missing" || state.model.status === "text_only";
+      if (needsDownload && !bridge.demo) {
+        void bridge.downloadModel().catch((error: unknown) => {
+          state.downloadError = error instanceof Error ? error.message : String(error);
+          render();
+        });
+      }
     } catch (error) {
       state.error = error instanceof Error ? error.message : String(error);
       state.phase = "missing";
