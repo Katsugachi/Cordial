@@ -63,13 +63,15 @@ impl Effort {
         }
     }
 
-    /// Maximum tokens generated per model round. Short caps keep the device
-    /// cool and the answers tight; the model is asked to be brief in prompt too.
+    /// Ceiling on tokens generated per model round. Generation still stops at
+    /// end-of-turn, so this only matters when reasoning runs long: a 2B model
+    /// can spend several hundred tokens thinking about a hard question, and a
+    /// tight cap would cut the answer off entirely.
     pub fn max_output_tokens(self) -> u32 {
         match self {
             Effort::Low => 512,
-            Effort::Medium => 1024,
-            Effort::High => 2048,
+            Effort::Medium => 1_536,
+            Effort::High => 3_072,
         }
     }
 

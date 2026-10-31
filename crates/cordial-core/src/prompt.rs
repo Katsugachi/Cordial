@@ -306,6 +306,10 @@ pub fn system_prompt(
         "- Be warm and direct, like a capable colleague. Answer the question, not the person.\n",
     );
     prompt.push_str("- Ask a question back only when the task cannot proceed without it.\n");
+    prompt.push_str(
+        "- Do not close with offers of further help (\"Would you like me to help with anything \
+         else?\"). Finish on the last useful sentence.\n",
+    );
     prompt.push_str("- If the user attaches an image, say what you actually see in it before answering the question.\n\n");
 
     prompt.push_str(effort.guidance());

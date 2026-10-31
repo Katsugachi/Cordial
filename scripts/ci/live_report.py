@@ -16,8 +16,8 @@ import re
 import sys
 
 SECTION = re.compile(r"^--- (?P<prompt>.+)$")
-META = re.compile(r"^\((?P<stop>[a-z_]+)(?:, (?P<words>\d+) words)?\)$")
-RESULT = re.compile(r"^test (?P<name>[\w:]+) \.\.\. (?P<status>ok|FAILED|ignored)$")
+META = re.compile(r"^\((?P<stop>[A-Za-z_]+)(?:, (?P<words>\d+) words)?\)$")
+RESULT = re.compile(r"^\s*test\s+(?P<name>\S+)\s+\.\.\.\s+(?P<status>ok|FAILED|ignored)")
 
 
 def parse(log: str) -> tuple[list[dict[str, str]], list[tuple[str, str]]]:
@@ -47,7 +47,8 @@ def parse(log: str) -> tuple[list[dict[str, str]], list[tuple[str, str]]]:
             meta_match = META.match(line.strip())
             if meta_match and not body:
                 words = meta_match.group("words")
-                meta = f"{meta_match.group('stop')}" + (f" · {words} words" if words else "")
+                stop = meta_match.group("stop").lower()
+                meta = stop + (f" · {words} words" if words else "")
                 continue
             body.append(line)
         else:

@@ -197,7 +197,7 @@ impl Live {
             permission_mode: PermissionMode::Auto,
             web_enabled,
             thinking: effort != Effort::Low,
-            max_output_tokens: 384,
+            max_output_tokens: 1_536,
             max_tool_rounds: effort.max_tool_rounds(),
             max_tool_result_chars: 6_000,
             keep_image_turns: 2,
