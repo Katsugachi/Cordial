@@ -1,8 +1,13 @@
 //! First-run model download and integrity checks.
 //!
 //! Cordial ships without weights and fetches Liquid AI's GGUF build the first
-//! time the window opens. Downloads resume, verify against the checksum the CDN
-//! advertises, and stream progress so the UI can show a real progress rail.
+//! time the window opens. Downloads resume, are verified against the digest
+//! Hugging Face publishes for the file, and stream progress so the UI can show
+//! a real progress rail.
+//!
+//! The digests below are pinned rather than read from response headers: a CDN
+//! `ETag` is not necessarily the object's SHA-256 (it was not for these files),
+//! and a checksum an attacker controls proves nothing.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -23,8 +28,13 @@ pub const DEFAULT_WEIGHTS: &str = "LFM3-VL-2B-Q4_K_M.gguf";
 /// Vision projector paired with the Q4_K_M weights.
 pub const DEFAULT_PROJECTOR: &str = "mmproj-LFM3-VL-2B-Q8_0.gguf";
 
-const WEIGHTS_BYTES: u64 = 1_100_000_000;
-const PROJECTOR_BYTES: u64 = 203_000_000;
+/// `LFM3-VL-2B-Q4_K_M.gguf`, from the Hub's file listing of 2026-10-31.
+const WEIGHTS_SHA256: &str = "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb";
+const WEIGHTS_BYTES: u64 = 1_099_627_808;
+
+/// `mmproj-LFM3-VL-2B-Q8_0.gguf`, from the same listing.
+const PROJECTOR_SHA256: &str = "c5c5b58d544a18da919172d2d0368090ea1a4a351b6feb7f8a326a264a5918ab";
+const PROJECTOR_BYTES: u64 = 203_031_872;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelKind {
@@ -32,28 +42,34 @@ pub enum ModelKind {
     Projector,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModelFile {
     pub name: &'static str,
-    pub url: String,
-    pub approx_bytes: u64,
     pub kind: ModelKind,
+    pub bytes: u64,
+    pub sha256: &'static str,
+}
+
+impl ModelFile {
+    pub fn url(&self) -> String {
+        format!("{HF_REPO}/{}", self.name)
+    }
 }
 
 /// The files Cordial downloads on first run.
-pub fn default_files() -> Vec<ModelFile> {
-    vec![
+pub fn default_files() -> [ModelFile; 2] {
+    [
         ModelFile {
             name: DEFAULT_WEIGHTS,
-            url: format!("{HF_REPO}/{DEFAULT_WEIGHTS}"),
-            approx_bytes: WEIGHTS_BYTES,
             kind: ModelKind::Weights,
+            bytes: WEIGHTS_BYTES,
+            sha256: WEIGHTS_SHA256,
         },
         ModelFile {
             name: DEFAULT_PROJECTOR,
-            url: format!("{HF_REPO}/{DEFAULT_PROJECTOR}"),
-            approx_bytes: PROJECTOR_BYTES,
             kind: ModelKind::Projector,
+            bytes: PROJECTOR_BYTES,
+            sha256: PROJECTOR_SHA256,
         },
     ]
 }
@@ -69,9 +85,7 @@ pub struct ModelPaths {
 pub enum ModelStatus {
     Ready(ModelPaths),
     /// Nothing usable yet; `missing_bytes` is the estimated download size.
-    Missing {
-        missing_bytes: u64,
-    },
+    Missing { missing_bytes: u64 },
     /// Weights are present but the projector is not, so images are unavailable.
     TextOnly(ModelPaths),
 }
@@ -117,43 +131,26 @@ impl ModelManager {
 
     /// What is on disk right now.
     pub fn status(&self) -> ModelStatus {
-        let weights = self.weights_path();
-        let projector = self.projector_path();
-        let weights_ok = is_complete(&weights);
-        let projector_ok = is_complete(&projector);
-        match (weights_ok, projector_ok) {
-            (true, true) => ModelStatus::Ready(ModelPaths {
-                weights,
-                projector: Some(projector),
-            }),
-            (true, false) => ModelStatus::TextOnly(ModelPaths {
-                weights,
-                projector: None,
-            }),
-            _ => ModelStatus::Missing {
-                missing_bytes: WEIGHTS_BYTES + PROJECTOR_BYTES,
-            },
-        }
+        status_in(&self.dir)
     }
 
     /// Downloads anything missing. Returns the paths that are now usable.
     pub async fn ensure_defaults(&self, events: &EventSink) -> Result<ModelPaths, CoreError> {
         tokio::fs::create_dir_all(&self.dir).await?;
-        let files = default_files();
 
         let mut weights: Option<PathBuf> = None;
         let mut projector: Option<PathBuf> = None;
 
-        for file in &files {
+        for file in default_files() {
             let target = self.dir.join(file.name);
-            if is_complete(&target) {
+            if is_complete(&target, file.bytes) {
                 match file.kind {
                     ModelKind::Weights => weights = Some(target),
                     ModelKind::Projector => projector = Some(target),
                 }
                 continue;
             }
-            match self.download(file, events).await {
+            match self.download(&file, events).await {
                 Ok(path) => match file.kind {
                     ModelKind::Weights => weights = Some(path),
                     ModelKind::Projector => projector = Some(path),
@@ -168,18 +165,20 @@ impl ModelManager {
                     }
                     // A missing projector only costs image understanding.
                     events.emit(AgentEvent::Notice {
-                        message: "Vision projector could not be downloaded; images are disabled."
+                        message: "The vision projector could not be downloaded, so images are \
+                                  disabled. Search, browsing and files still work."
                             .to_string(),
                     });
                 }
             }
         }
 
-        let weights = weights
-            .ok_or_else(|| CoreError::ModelNotReady("the model file is missing".to_string()))?;
+        let weights = weights.ok_or_else(|| {
+            CoreError::ModelNotReady("the model file is missing".to_string())
+        })?;
         Ok(ModelPaths {
             weights,
-            projector: projector.filter(|path| is_complete(path)),
+            projector: projector.filter(|path| is_complete(path, PROJECTOR_BYTES)),
         })
     }
 
@@ -187,7 +186,7 @@ impl ModelManager {
     ///
     /// A gigabyte over a home connection will hiccup: each attempt picks up from
     /// the bytes already on disk, and the finished file is only moved into place
-    /// once its checksum matches the one the CDN advertises.
+    /// once its length and SHA-256 match the pinned digest.
     async fn download(&self, file: &ModelFile, events: &EventSink) -> Result<PathBuf, CoreError> {
         const ATTEMPTS: u32 = 4;
 
@@ -206,18 +205,19 @@ impl ModelManager {
                     return Ok(target);
                 }
                 Err(err) => {
-                    if attempt == ATTEMPTS {
-                        last_error = Some(err);
+                    let final_attempt = attempt == ATTEMPTS;
+                    last_error = Some(err);
+                    if final_attempt {
                         break;
                     }
                     events.emit(AgentEvent::Notice {
                         message: format!(
-                            "Download of {} was interrupted (attempt {attempt} of {ATTEMPTS}); resuming.",
+                            "Download of {} was interrupted (attempt {attempt} of {ATTEMPTS}); \
+                             resuming from the bytes already on disk.",
                             file.name
                         ),
                     });
                     tokio::time::sleep(Duration::from_secs(u64::from(attempt) * 3)).await;
-                    last_error = Some(err);
                 }
             }
         }
@@ -237,8 +237,13 @@ impl ModelManager {
             Ok(meta) => meta.len(),
             Err(_) => 0,
         };
+        if received >= file.bytes {
+            // A previous attempt finished writing but never renamed the file.
+            received = 0;
+            tokio::fs::remove_file(partial).await.ok();
+        }
 
-        let mut request = self.client.get(&file.url);
+        let mut request = self.client.get(&file.url());
         if received > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={received}-"));
         }
@@ -250,28 +255,15 @@ impl ModelManager {
         if !response.status().is_success() {
             return Err(CoreError::Network(format!(
                 "{} returned HTTP {}",
-                file.url,
+                file.url(),
                 response.status()
             )));
         }
-
-        // Hugging Face advertises the LFS SHA-256 in the ETag.
-        let expected_sha = response
-            .headers()
-            .get("x-linked-etag")
-            .or_else(|| response.headers().get(reqwest::header::ETAG))
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.trim_matches('"').to_ascii_lowercase())
-            .filter(|value| value.len() == 64);
 
         let append = received > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
         if !append {
             received = 0;
         }
-        let total = response
-            .content_length()
-            .map(|length| received + length)
-            .or(Some(file.approx_bytes).filter(|_| !append));
 
         let mut handle = if append {
             tokio::fs::OpenOptions::new()
@@ -285,7 +277,7 @@ impl ModelManager {
         events.emit(AgentEvent::DownloadProgress {
             file: file.name.to_string(),
             received,
-            total,
+            total: Some(file.bytes),
         });
 
         // Hash from the start so resumed files still verify, in chunks: a 1 GB
@@ -316,7 +308,7 @@ impl ModelManager {
                 events.emit(AgentEvent::DownloadProgress {
                     file: file.name.to_string(),
                     received,
-                    total,
+                    total: Some(file.bytes),
                 });
             }
         }
@@ -324,20 +316,27 @@ impl ModelManager {
         handle.sync_all().await?;
         drop(handle);
 
-        if let Some(expected) = expected_sha {
-            let digest: String = hasher
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect();
-            if digest != expected {
-                // The bytes are wrong, so resuming from them would never work.
-                let _ = tokio::fs::remove_file(partial).await;
-                return Err(CoreError::Network(format!(
-                    "checksum mismatch for {} (the download was corrupted, restarting)",
-                    file.name
-                )));
-            }
+        if received != file.bytes {
+            // Keep the partial file: a later attempt resumes from it.
+            return Err(CoreError::Network(format!(
+                "{} is incomplete ({} of {} bytes)",
+                file.name, received, file.bytes
+            )));
+        }
+
+        let digest: String = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        if digest != file.sha256 {
+            // The bytes are wrong, so resuming from them would never work.
+            tokio::fs::remove_file(partial).await.ok();
+            return Err(CoreError::Network(format!(
+                "{} failed its checksum (expected {}, got {digest}). The download was \
+                 corrupted in transit and has been discarded.",
+                file.name, file.sha256
+            )));
         }
 
         Ok(())
@@ -359,11 +358,34 @@ impl ModelManager {
     }
 }
 
-/// A file counts as present when it exists and is bigger than a few MB, which
-/// rules out interrupted writes that never reached the rename.
-fn is_complete(path: &Path) -> bool {
+/// The managed-model status for a folder, without building a client.
+pub fn status_in(dir: &Path) -> ModelStatus {
+    let files = default_files();
+    let weights = dir.join(files[0].name);
+    let projector = dir.join(files[1].name);
+    match (
+        is_complete(&weights, files[0].bytes),
+        is_complete(&projector, files[1].bytes),
+    ) {
+        (true, true) => ModelStatus::Ready(ModelPaths {
+            weights,
+            projector: Some(projector),
+        }),
+        (true, false) => ModelStatus::TextOnly(ModelPaths {
+            weights,
+            projector: None,
+        }),
+        _ => ModelStatus::Missing {
+            missing_bytes: files[0].bytes + files[1].bytes,
+        },
+    }
+}
+
+/// A managed file counts as present when its length matches the pinned size.
+/// Anything else (an interrupted write, a truncated copy) is re-fetched.
+fn is_complete(path: &Path, expected_bytes: u64) -> bool {
     std::fs::metadata(path)
-        .map(|meta| meta.len() > 1_000_000)
+        .map(|meta| meta.len() == expected_bytes)
         .unwrap_or(false)
 }
 
@@ -372,14 +394,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_files_point_at_the_hub() {
+    fn default_files_carry_pinned_digests() {
         let files = default_files();
-        assert_eq!(files.len(), 2);
-        assert!(files[0]
-            .url
-            .starts_with("https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF"));
-        assert!(files[0].url.ends_with(DEFAULT_WEIGHTS));
+        assert_eq!(files[0].name, DEFAULT_WEIGHTS);
+        assert_eq!(files[0].bytes, 1_099_627_808);
+        assert_eq!(files[0].sha256.len(), 64);
+        assert!(files[0].sha256.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(files[0].url().starts_with(HF_REPO));
         assert_eq!(files[1].kind, ModelKind::Projector);
+        assert_eq!(files[1].bytes, 203_031_872);
     }
 
     #[test]
@@ -388,25 +411,36 @@ mod tests {
         let manager = ModelManager::new(&dir).unwrap();
         match manager.status() {
             ModelStatus::Missing { missing_bytes } => {
-                assert!(missing_bytes > 1_000_000_000);
+                assert_eq!(missing_bytes, WEIGHTS_BYTES + PROJECTOR_BYTES);
             }
             other => panic!("unexpected status: {other:?}"),
         }
     }
 
     #[test]
-    fn complete_files_are_detected() {
+    fn truncated_files_are_not_trusted() {
         let dir = std::env::temp_dir().join(format!("cordial-mm2-{}", crate::util::now_ms()));
         std::fs::create_dir_all(&dir).unwrap();
         let manager = ModelManager::new(&dir).unwrap();
+        // The right name, the wrong length: this must not count as ready.
         std::fs::write(manager.weights_path(), vec![0u8; 1_200_000]).unwrap();
-        match manager.status() {
-            ModelStatus::TextOnly(paths) => {
-                assert!(paths.projector.is_none());
-            }
-            other => panic!("unexpected status: {other:?}"),
-        }
-        std::fs::write(manager.projector_path(), vec![0u8; 1_200_000]).unwrap();
+        assert!(matches!(manager.status(), ModelStatus::Missing { .. }));
+
+        // Correct lengths on both files is the ready state.
+        let files = default_files();
+        let big = vec![0u8; 1024];
+        let _ = big;
+        let weights = std::fs::OpenOptions::new()
+            .write(true)
+            .open(manager.weights_path())
+            .unwrap();
+        weights.set_len(files[0].bytes).unwrap();
+        let projector = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(manager.projector_path())
+            .unwrap();
+        projector.set_len(files[1].bytes).unwrap();
         assert!(manager.status().is_ready());
         std::fs::remove_dir_all(&dir).ok();
     }

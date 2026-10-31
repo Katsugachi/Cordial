@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use cordial_core::backend::{engine_options, Backend, EngineInfo, LlamaBackend};
 use cordial_core::events::{AgentEvent, EventSink};
-use cordial_core::model_manager::{self, ModelManager, ModelPaths};
+use cordial_core::model_manager::{self, ModelManager, ModelPaths, ModelStatus};
 use cordial_core::permissions::PermissionPolicy;
 use cordial_core::session::{Attachment, Session, SessionStore};
 use cordial_core::settings::Settings;
@@ -345,11 +345,10 @@ pub struct ModelSummary {
 
 pub fn model_summary(core: &Core) -> ModelSummary {
     let models_dir = core.paths.models_dir();
-    let weights = models_dir.join(model_manager::DEFAULT_WEIGHTS);
-    let projector = models_dir.join(model_manager::DEFAULT_PROJECTOR);
+    let status = model_manager::status_in(&models_dir);
 
-    match &core.engine {
-        Some(engine) => ModelSummary {
+    if let Some(engine) = &core.engine {
+        return ModelSummary {
             status: "ready".to_string(),
             description: engine.info.description.clone(),
             context_tokens: engine.info.context_tokens,
@@ -363,28 +362,37 @@ pub fn model_summary(core: &Core) -> ModelSummary {
                 .as_ref()
                 .map(|path| path.display().to_string())
                 .unwrap_or_default(),
-        },
-        None => {
-            let weights_ok = weights.is_file();
-            let projector_ok = projector.is_file();
-            let status = match (weights_ok, projector_ok) {
-                (true, true) => "loading",
-                (true, false) => "text_only",
-                _ => "missing",
-            };
-            let missing = if weights_ok { 0 } else { 1_100_000_000 }
-                + if projector_ok { 0 } else { 203_000_000 };
-            ModelSummary {
-                status: status.to_string(),
-                description: String::new(),
-                context_tokens: core.settings.context_tokens,
-                backend: cordial_llama::BACKEND.to_string(),
-                vision: projector_ok,
-                missing_bytes: missing,
-                weights_path: weights.display().to_string(),
-                projector_path: projector.display().to_string(),
-            }
+        };
+    }
+
+    let (name, missing_bytes, vision) = match &status {
+        ModelStatus::Ready(paths) => (
+            "loading",
+            0,
+            paths.projector.is_some(),
+        ),
+        ModelStatus::TextOnly(_) => {
+            let files = model_manager::default_files();
+            ("text_only", files[1].bytes, false)
         }
+        ModelStatus::Missing { missing_bytes } => ("missing", *missing_bytes, false),
+    };
+
+    ModelSummary {
+        status: name.to_string(),
+        description: String::new(),
+        context_tokens: core.settings.context_tokens,
+        backend: cordial_llama::BACKEND.to_string(),
+        vision,
+        missing_bytes,
+        weights_path: models_dir
+            .join(model_manager::DEFAULT_WEIGHTS)
+            .display()
+            .to_string(),
+        projector_path: models_dir
+            .join(model_manager::DEFAULT_PROJECTOR)
+            .display()
+            .to_string(),
     }
 }
 
