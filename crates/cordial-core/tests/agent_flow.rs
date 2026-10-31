@@ -248,7 +248,12 @@ async fn writes_need_approval_even_in_auto_mode() {
     let fixture = Fixture::new("write");
     let mut session = Session::new();
     let script = vec![
-        "<tool_call>\n<function=write_file>\n<parameter=path>\nplan.md\n<parameter=content>\nShip Friday.\n</parameter>\n</function>\n</tool_call>",
+        concat!(
+            "<tool_call>\n<function=write_file>\n",
+            "<parameter=path>\nplan.md\n</parameter>\n",
+            "<parameter=content>\nShip Friday.\n</parameter>\n",
+            "</function>\n</tool_call>"
+        ),
         "Written.",
     ];
     let gate = ApprovalGate::new();
