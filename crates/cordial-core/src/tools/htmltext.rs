@@ -3,6 +3,35 @@
 //! Pages arrive with script tags, inline styles and entity soup. The model only
 //! needs readable prose and links, so this module throws away the rest and keeps
 //! the structure that matters: headings, paragraphs, list items and links.
+//!
+//! The parser is deliberately simple and single-pass: find `<`, read the tag
+//! name, decide whether the tag's inner text matters, and skip to the end of the
+//! tag. Anything it does not understand is dropped rather than shown to the
+//! model as markup.
+
+/// Elements whose contents are never shown.
+const DROP: [&str; 7] = ["script", "style", "noscript", "svg", "canvas", "template", "iframe"];
+
+/// Elements that end a line of text.
+const BLOCK: [&str; 17] = [
+    "p",
+    "div",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "main",
+    "tr",
+    "blockquote",
+    "figure",
+    "figcaption",
+    "dl",
+    "dt",
+    "dd",
+    "table",
+    "ul",
+    "ol",
+];
 
 /// Converts an HTML document to readable text.
 pub fn html_to_text(html: &str) -> String {
@@ -20,57 +49,72 @@ pub fn html_to_text(html: &str) -> String {
         }
 
         let rest = &html[index + 1..];
-        let raw_name = tag_name(rest);
-        let name = raw_name.trim_start_matches('/');
-        let closing = raw_name.starts_with('/');
 
-        if rest.starts_with("!--") {
-            if let Some(offset) = html[index..].find("-->") {
-                skip_to(&mut chars, index + offset + 3);
+        // Comments and doctypes.
+        if rest.starts_with("!--") || rest.starts_with('!') {
+            if let Some(offset) = html[index..].find('>') {
+                skip_to(&mut chars, index + offset + 1);
             }
             continue;
         }
 
-        match name {
-            "script" | "style" | "noscript" | "svg" | "canvas" | "template" | "iframe" => {
-                if !closing {
-                    skip_element(&mut chars, html, &lowered, index, name);
-                }
-                continue;
+        let closing = rest.starts_with('/');
+        let body = rest.trim_start_matches('/');
+        let name = tag_name(body);
+
+        // End of the tag itself, so its characters never reach the output.
+        let tag_end = html[index..]
+            .find('>')
+            .map(|offset| index + offset + 1)
+            .unwrap_or(html.len());
+
+        if name.is_empty() {
+            skip_to(&mut chars, tag_end);
+            continue;
+        }
+
+        if DROP.contains(&name.as_str()) {
+            if closing {
+                skip_to(&mut chars, tag_end);
+            } else {
+                skip_element(&mut chars, html, &lowered, index, &name);
             }
+            continue;
+        }
+
+        if closing {
+            // A closing tag only ends the line.
+            if BLOCK.contains(&name.as_str())
+                || matches!(name.as_str(), "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
+            {
+                push_break(&mut out);
+            }
+            skip_to(&mut chars, tag_end);
+            continue;
+        }
+
+        match name.as_str() {
             "title" => {
-                if !closing {
-                    let text = capture_text(&mut chars, html, &lowered, index, "title");
-                    if !text.trim().is_empty() {
-                        title = text.trim().to_string();
-                    }
+                let text = capture_text(&mut chars, html, &lowered, index, "title");
+                if !text.trim().is_empty() {
+                    title = text.trim().to_string();
                 }
                 continue;
             }
             "a" => {
-                if !closing {
-                    if let Some(href) = attribute(rest, "href") {
-                        let text = capture_text(&mut chars, html, &lowered, index, "a");
-                        let label = text.trim();
-                        if !label.is_empty() {
-                            out.push_str(label);
-                            if !is_internal(&href) && !label.starts_with("http") {
-                                out.push_str(" (");
-                                out.push_str(&href);
-                                out.push(')');
-                            }
+                if let Some(href) = attribute(body, "href") {
+                    let text = capture_text(&mut chars, html, &lowered, index, "a");
+                    let label = text.trim();
+                    if !label.is_empty() {
+                        out.push_str(label);
+                        if !is_internal(&href) && !label.starts_with("http") {
+                            out.push_str(" (");
+                            out.push_str(&href);
+                            out.push(')');
                         }
-                        continue;
                     }
+                    continue;
                 }
-            }
-            _ => {}
-        }
-
-        match name {
-            "p" | "div" | "section" | "article" | "header" | "footer" | "main" | "tr"
-            | "blockquote" | "figure" | "figcaption" | "dl" | "dt" | "dd" | "table" => {
-                push_break(&mut out)
             }
             "br" => out.push('\n'),
             "hr" => out.push_str("\n---\n"),
@@ -83,8 +127,11 @@ pub fn html_to_text(html: &str) -> String {
                 out.push('\n');
             }
             "td" | "th" => out.push_str(" | "),
+            other if BLOCK.contains(&other) => push_break(&mut out),
             _ => {}
         }
+
+        skip_to(&mut chars, tag_end);
     }
 
     let mut text = tidy(&decode_entities(&out));
@@ -98,15 +145,12 @@ pub fn html_to_text(html: &str) -> String {
     text
 }
 
+/// Reads the element name at the start of `rest`.
 fn tag_name(rest: &str) -> String {
     let mut end = rest.len();
-    for (i, c) in rest.char_indices() {
-        if c.is_whitespace() || c == '>' || c == '/' {
-            end = i;
-            break;
-        }
-        if i > 24 {
-            end = i;
+    for (index, ch) in rest.char_indices() {
+        if ch.is_whitespace() || ch == '>' || ch == '/' || index > 24 {
+            end = index;
             break;
         }
     }
@@ -114,14 +158,14 @@ fn tag_name(rest: &str) -> String {
 }
 
 fn push_break(out: &mut String) {
-    if !out.ends_with('\n') {
+    if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
     }
 }
 
 fn skip_to(chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>, target: usize) {
-    while let Some((i, _)) = chars.peek().copied() {
-        if i >= target {
+    while let Some((index, _)) = chars.peek().copied() {
+        if index >= target {
             break;
         }
         chars.next();
@@ -150,7 +194,7 @@ fn skip_element(
     skip_to(chars, end);
 }
 
-/// Collects text between the current tag and its closing tag.
+/// Collects the text between an opening tag and its closing tag.
 fn capture_text(
     chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>,
     html: &str,
@@ -168,9 +212,10 @@ fn capture_text(
         None => end,
     };
     let text = strip_tags(html.get(inner_start..end).unwrap_or(""));
+
     // Skip past the closing tag's '>'.
-    let after = end.saturating_add(closing.len());
-    let absolute_end = html[after.min(html.len())..]
+    let after = end.saturating_add(closing.len()).min(html.len());
+    let absolute_end = html[after..]
         .find('>')
         .map(|gt| after + gt + 1)
         .unwrap_or(after);
@@ -291,7 +336,7 @@ mod tests {
         let html = "<html><head><title>Doc</title><style>body{color:red}</style></head>\
                     <body><script>alert('x')</script><p>Hello <b>world</b></p></body></html>";
         let text = html_to_text(html);
-        assert!(text.contains("Hello world"));
+        assert!(text.contains("Hello world"), "got: {text}");
         assert!(!text.contains("alert"));
         assert!(!text.contains("color:red"));
         assert!(text.starts_with("Doc"));
@@ -306,7 +351,7 @@ mod tests {
     #[test]
     fn renders_links_with_targets() {
         let text = html_to_text(r#"<p>Read <a href="https://example.com/x">the docs</a>.</p>"#);
-        assert!(text.contains("the docs (https://example.com/x)"));
+        assert!(text.contains("the docs (https://example.com/x)"), "got: {text}");
     }
 
     #[test]
@@ -316,25 +361,46 @@ mod tests {
     }
 
     #[test]
-    fn lists_become_bullets() {
+    fn lists_become_bullets_without_duplicates() {
         let text = html_to_text("<ul><li>Alpha</li><li>Beta</li></ul>");
-        assert!(text.contains("• Alpha"));
-        assert!(text.contains("• Beta"));
+        assert_eq!(text, "• Alpha\n• Beta", "got: {text}");
     }
 
     #[test]
     fn nested_markup_is_flattened() {
-        let html =
-            "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
+        let html = "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
         let text = html_to_text(html);
         assert!(text.contains("Title"));
         assert!(text.contains("Body text here."));
     }
 
     #[test]
+    fn tags_with_attributes_are_consumed() {
+        let text =
+            html_to_text(r#"<p class="lead" data-x="1">Read this</p><div id="x">then this</div>"#);
+        assert_eq!(text, "Read this\nthen this");
+    }
+
+    #[test]
+    fn closing_tags_leave_no_debris() {
+        let text = html_to_text("<div><p>One</p></div><ul><li>Two</li></ul>");
+        assert!(!text.contains('>'), "got: {text}");
+        assert!(!text.contains('<'), "got: {text}");
+        assert!(text.contains("One"));
+        assert!(text.contains("• Two"));
+    }
+
+    #[test]
     fn unclosed_script_does_not_eat_everything_after_it() {
         let text = html_to_text("<script>var x = 1; <p>real</p>");
         assert!(!text.contains("var x"));
+    }
+
+    #[test]
+    fn entities_survive_in_links() {
+        let text = html_to_text(r#"<a href="https://example.com/?a=1&amp;b=2">search &amp; more</a>"#);
+        assert!(text.contains("search & more"));
+        assert!(text.contains("https://example.com/?a=1&amp;b=2"));
     }
 
     #[test]
