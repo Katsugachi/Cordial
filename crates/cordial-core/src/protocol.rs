@@ -66,6 +66,12 @@ impl ParsedReply {
 /// generation starts inside `<think>`, so text before `</think>` is reasoning by
 /// construction. When it is off, the whole reply is answer text.
 pub fn parse_reply(raw: &str, thinking_enabled: bool) -> ParsedReply {
+    // Nothing generated at all is not "reasoning ran long"; it is an empty
+    // answer, and the caller should say so rather than retry blindly.
+    if raw.trim().is_empty() {
+        return ParsedReply::default();
+    }
+
     let mut parsed = ParsedReply::default();
 
     let body = if thinking_enabled {
