@@ -13,8 +13,6 @@ projector (203 MB), and from then on the network is used only when the agent
 searches or browses for you.  <br><br>
 The X post from LiquidAI said it was almost as capable as GPT 5.6 Luna and i guess if it's stable enough to be in Cordial that's good.
 
-![Cordial](assets/brand/icon-preview.png)
-
 ## What it does
 
 - **Answers with sources.** The system prompt pushes the model to search before it
