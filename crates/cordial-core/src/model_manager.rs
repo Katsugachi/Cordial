@@ -85,7 +85,9 @@ pub struct ModelPaths {
 pub enum ModelStatus {
     Ready(ModelPaths),
     /// Nothing usable yet; `missing_bytes` is the estimated download size.
-    Missing { missing_bytes: u64 },
+    Missing {
+        missing_bytes: u64,
+    },
     /// Weights are present but the projector is not, so images are unavailable.
     TextOnly(ModelPaths),
 }
@@ -173,9 +175,8 @@ impl ModelManager {
             }
         }
 
-        let weights = weights.ok_or_else(|| {
-            CoreError::ModelNotReady("the model file is missing".to_string())
-        })?;
+        let weights = weights
+            .ok_or_else(|| CoreError::ModelNotReady("the model file is missing".to_string()))?;
         Ok(ModelPaths {
             weights,
             projector: projector.filter(|path| is_complete(path, PROJECTOR_BYTES)),

@@ -366,11 +366,7 @@ pub fn model_summary(core: &Core) -> ModelSummary {
     }
 
     let (name, missing_bytes, vision) = match &status {
-        ModelStatus::Ready(paths) => (
-            "loading",
-            0,
-            paths.projector.is_some(),
-        ),
+        ModelStatus::Ready(paths) => ("loading", 0, paths.projector.is_some()),
         ModelStatus::TextOnly(_) => {
             let files = model_manager::default_files();
             ("text_only", files[1].bytes, false)
