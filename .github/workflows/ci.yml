@@ -174,7 +174,7 @@ jobs:
             echo "==== questions and answers ===="
             # The Q/A blocks and the assertion, so a failure is readable without
             # the job log.
-            grep -E "^--- |^\(|^> |MODEL BOOT FAILED|MODEL LOAD FAILED|panicked at|assertion|left:|right:|test result" "$log" \
+            grep -E "^--- |^\(|^  · |^> |MODEL BOOT FAILED|MODEL LOAD FAILED|panicked at|assertion|left:|right:|test result" "$log" \
               | head -40 \
               | while IFS= read -r line; do
                   printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
