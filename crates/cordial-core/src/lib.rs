@@ -20,7 +20,10 @@ pub mod tools;
 pub mod util;
 
 pub use agent::{Agent, AgentConfig, ApprovalGate, TurnResult};
-pub use backend::{Backend, EngineOptions, GenStop, GenerateOutput, GenerateRequest, LlamaBackend};
+pub use backend::{
+    Backend, EngineInfo, EngineOptions, GenStop, GenerateOutput, GenerateRequest, LlamaBackend,
+    ScriptedBackend,
+};
 pub use error::CoreError;
 pub use events::{AgentEvent, EventSink, StopReason};
 pub use model_manager::{ModelManager, ModelPaths, ModelStatus};

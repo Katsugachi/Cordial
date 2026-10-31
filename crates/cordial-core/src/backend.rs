@@ -64,6 +64,15 @@ enum WorkerCommand {
     Shutdown,
 }
 
+/// What the worker reports once the model is loaded.
+#[derive(Debug, Clone)]
+pub struct EngineInfo {
+    pub description: String,
+    pub context_tokens: u32,
+    pub vision: bool,
+    pub backend: String,
+}
+
 /// How the model was launched.
 #[derive(Debug, Clone)]
 pub struct EngineOptions {
@@ -87,7 +96,7 @@ impl LlamaBackend {
         options: EngineOptions,
         events: EventSink,
         cancel: Arc<AtomicBool>,
-    ) -> Result<(Self, tokio::sync::oneshot::Receiver<Result<(), CoreError>>), CoreError> {
+    ) -> Result<(Self, tokio::sync::oneshot::Receiver<Result<EngineInfo, CoreError>>), CoreError> {
         let (command_tx, command_rx) = std::sync::mpsc::channel();
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
         let cancel_for_worker = Arc::clone(&cancel);
@@ -183,7 +192,7 @@ fn worker_main(
     events: EventSink,
     cancel: Arc<AtomicBool>,
     commands: std::sync::mpsc::Receiver<WorkerCommand>,
-    ready: tokio::sync::oneshot::Sender<Result<(), CoreError>>,
+    ready: tokio::sync::oneshot::Sender<Result<EngineInfo, CoreError>>,
 ) {
     events.emit(AgentEvent::ModelLoading {
         path: options.model_path.display().to_string(),
@@ -228,16 +237,19 @@ fn worker_main(
 
     match loaded {
         Ok(state) => {
-            let description = state.model.description();
-            let context_tokens = state.context.n_ctx();
-            let vision = state.mtmd.as_ref().map(|m| m.has_vision()).unwrap_or(false);
-            let _ = ready.send(Ok(()));
+            let info = EngineInfo {
+                description: state.model.description(),
+                context_tokens: state.context.n_ctx(),
+                vision: state.mtmd.as_ref().map(|m| m.has_vision()).unwrap_or(false),
+                backend: cordial_llama::BACKEND.to_string(),
+            };
+            let _ = ready.send(Ok(info.clone()));
             let mut state = state;
             state.events.emit(AgentEvent::ModelReady {
-                description,
-                context_tokens,
-                backend: cordial_llama::BACKEND.to_string(),
-                vision,
+                description: info.description,
+                context_tokens: info.context_tokens,
+                backend: info.backend,
+                vision: info.vision,
             });
 
             while let Ok(command) = commands.recv() {

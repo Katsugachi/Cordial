@@ -13,29 +13,74 @@ env:
   LLAMA_CPP_TAG: b12020
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 
 jobs:
-  rust:
-    name: Rust (fmt, clippy, tests)
+  formatting:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: scripts/ci/report.sh cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cordial-rust
           cache-on-failure: true
-      - name: Formatting
-        run: scripts/ci/report.sh cargo fmt --all -- --check
+      - name: Placeholder frontend bundle
+        # tauri::generate_context! embeds the frontend at compile time.
+        run: mkdir -p ui/dist && printf '<!doctype html><title>Cordial</title>' > ui/dist/index.html
       - name: Clippy
         run: scripts/ci/report.sh cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cordial-rust
+          cache-on-failure: true
+      - name: Placeholder frontend bundle
+        run: mkdir -p ui/dist && printf '<!doctype html><title>Cordial</title>' > ui/dist/index.html
       - name: Tests
         run: scripts/ci/report.sh cargo test --workspace --all-targets
+
+  ui:
+    name: UI (typecheck, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm --prefix ui ci
+      - name: Typecheck
+        run: scripts/ci/report.sh npm --prefix ui run typecheck
+      - name: Unit tests
+        run: scripts/ci/report.sh npm --prefix ui run test
+      - name: Build
+        run: scripts/ci/report.sh npm --prefix ui run build
 
   inference-stack:
     name: Inference stack (llama.cpp + model reachability)
