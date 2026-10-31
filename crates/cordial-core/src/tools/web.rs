@@ -308,18 +308,28 @@ pub async fn fetch(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
 }
 
 fn normalise_url(raw: &str) -> Option<String> {
-    let candidate = if raw.starts_with("http://") || raw.starts_with("https://") {
-        raw.to_string()
-    } else if raw.contains('.') && !raw.contains(' ') {
-        format!("https://{raw}")
+    let trimmed = raw.trim();
+    let candidate = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else if trimmed.contains("://") {
+        // Something like "ftp://host/page". Prefixing it with https would make
+        // `ftp` the host and `//host/page` the path, which is not what the user
+        // or the model meant.
+        return None;
+    } else if trimmed.contains('.') && !trimmed.chars().any(char::is_whitespace) {
+        format!("https://{trimmed}")
     } else {
         return None;
     };
+
     let parsed = url::Url::parse(&candidate).ok()?;
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return None;
     }
-    Some(parsed.to_string())
+    match parsed.host_str() {
+        Some(host) if !host.is_empty() => Some(parsed.to_string()),
+        _ => None,
+    }
 }
 
 fn short_host(url: &str) -> String {
@@ -390,6 +400,9 @@ mod tests {
         );
         assert_eq!(normalise_url("not a url"), None);
         assert_eq!(normalise_url("ftp://example.com"), None);
+        assert_eq!(normalise_url("javascript://alert(1)"), None);
+        assert_eq!(normalise_url("example.com:8080/path"), Some("https://example.com:8080/path".to_string()));
+        assert_eq!(normalise_url("https://example.com/a?b=c"), Some("https://example.com/a?b=c".to_string()));
     }
 
     #[test]

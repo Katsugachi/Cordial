@@ -455,7 +455,11 @@ fn normalise(url: &str) -> Result<String, CoreError> {
     let trimmed = url.trim();
     let candidate = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
         trimmed.to_string()
-    } else if trimmed.contains('.') && !trimmed.contains(' ') {
+    } else if trimmed.contains("://") {
+        return Err(CoreError::Other(
+            "only http and https addresses can be opened".to_string(),
+        ));
+    } else if trimmed.contains('.') && !trimmed.chars().any(char::is_whitespace) {
         format!("https://{trimmed}")
     } else {
         return Err(CoreError::Other(format!(
@@ -467,6 +471,11 @@ fn normalise(url: &str) -> Result<String, CoreError> {
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return Err(CoreError::Other(
             "only http and https addresses can be opened".to_string(),
+        ));
+    }
+    if parsed.host_str().map(str::is_empty).unwrap_or(true) {
+        return Err(CoreError::Other(
+            "that address has no host to open".to_string(),
         ));
     }
     Ok(parsed.to_string())
@@ -611,6 +620,7 @@ mod tests {
         assert_eq!(normalise("example.com").unwrap(), "https://example.com/");
         assert!(normalise("not an address").is_err());
         assert!(normalise("file:///etc/passwd").is_err());
+        assert!(normalise("ftp://example.com/x").is_err());
     }
 
     #[test]

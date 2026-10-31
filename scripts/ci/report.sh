@@ -26,6 +26,13 @@ if [ "$status" -ne 0 ]; then
     [ "$annotated" -ge 36 ] && break
   done < <(grep -A 4 -E '^error(\[|:)|^error: could not compile' "$log" | head -36 || true)
 
+  # Test failures: the assertion values matter more than the stack trace.
+  while IFS= read -r line; do
+    printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g')"
+    annotated=$((annotated + 1))
+    [ "$annotated" -ge 44 ] && break
+  done < <(grep -E 'panicked at|left:|right:|assertion|---- .* stdout ----' "$log" | head -8 || true)
+
   # Then the tail, which catches failures without diagnostics (killed builds).
   if [ "$annotated" -lt 40 ]; then
     remaining=$((40 - annotated))
