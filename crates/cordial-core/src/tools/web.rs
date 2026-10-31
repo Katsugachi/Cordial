@@ -248,7 +248,10 @@ pub async fn fetch(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     let response = match runtime.http().get(&url).send().await {
         Ok(response) => response,
         Err(err) => {
-            return ToolOutcome::fail("fetch failed", format!("Error: could not load {url}: {err}"))
+            return ToolOutcome::fail(
+                "fetch failed",
+                format!("Error: could not load {url}: {err}"),
+            )
         }
     };
 
@@ -301,10 +304,7 @@ pub async fn fetch(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     let limit = runtime.effort().fetch_chars();
     let clipped = truncate_chars(&text, limit);
     let summary = format!("{} chars from {}", text.chars().count(), short_host(&url));
-    ToolOutcome::ok(
-        summary,
-        format!("Text of {url}:\n\n{clipped}"),
-    )
+    ToolOutcome::ok(summary, format!("Text of {url}:\n\n{clipped}"))
 }
 
 fn normalise_url(raw: &str) -> Option<String> {

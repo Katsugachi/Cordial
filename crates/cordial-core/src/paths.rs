@@ -57,8 +57,12 @@ impl Paths {
 
     /// Creates every directory the app writes into.
     pub fn ensure(&self) -> Result<(), CoreError> {
-        for dir in [self.root.clone(), self.models_dir(), self.sessions_dir(), self.workspace_dir()]
-        {
+        for dir in [
+            self.root.clone(),
+            self.models_dir(),
+            self.sessions_dir(),
+            self.workspace_dir(),
+        ] {
             std::fs::create_dir_all(&dir)?;
         }
         Ok(())
@@ -74,6 +78,9 @@ mod tests {
         let paths = Paths::at("/tmp/cordial-test");
         assert!(paths.models_dir().starts_with("/tmp/cordial-test"));
         assert!(paths.sessions_dir().starts_with("/tmp/cordial-test"));
-        assert_eq!(paths.workspace_dir(), Path::new("/tmp/cordial-test/workspace"));
+        assert_eq!(
+            paths.workspace_dir(),
+            Path::new("/tmp/cordial-test/workspace")
+        );
     }
 }

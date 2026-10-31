@@ -324,7 +324,8 @@ mod tests {
 
     #[test]
     fn nested_markup_is_flattened() {
-        let html = "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
+        let html =
+            "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
         let text = html_to_text(html);
         assert!(text.contains("Title"));
         assert!(text.contains("Body text here."));

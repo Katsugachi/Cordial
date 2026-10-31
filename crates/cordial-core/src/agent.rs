@@ -14,7 +14,7 @@ use std::time::Duration;
 use cordial_llama::SamplingParams;
 use tokio::sync::oneshot;
 
-use crate::backend::{Backend, GenStop, GenerateRequest, GenerateOutput};
+use crate::backend::{Backend, GenStop, GenerateOutput, GenerateRequest};
 use crate::error::CoreError;
 use crate::events::{AgentEvent, EventSink, StopReason};
 use crate::permissions::{Permission, PermissionPolicy};
@@ -235,7 +235,8 @@ impl<'a> Agent<'a> {
                 });
             }
 
-            let assistant = Message::assistant(parsed.content.clone(), parsed.thinking, calls.clone());
+            let assistant =
+                Message::assistant(parsed.content.clone(), parsed.thinking, calls.clone());
             self.events.emit(AgentEvent::AssistantMessage {
                 turn_id: turn_id.clone(),
                 message: assistant.clone(),
@@ -429,8 +430,9 @@ impl<'a> Agent<'a> {
                         return Err(err);
                     }
                     self.events.emit(AgentEvent::Notice {
-                        message: "Trimmed the oldest turn so the conversation fits the context window."
-                            .to_string(),
+                        message:
+                            "Trimmed the oldest turn so the conversation fits the context window."
+                                .to_string(),
                     });
                 }
                 Err(err) => return Err(err),

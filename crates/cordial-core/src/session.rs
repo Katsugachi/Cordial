@@ -115,7 +115,11 @@ impl Message {
         }
     }
 
-    pub fn assistant(content: impl Into<String>, thinking: Option<String>, tool_calls: Vec<ToolCall>) -> Self {
+    pub fn assistant(
+        content: impl Into<String>,
+        thinking: Option<String>,
+        tool_calls: Vec<ToolCall>,
+    ) -> Self {
         Self {
             id: new_id(),
             role: Role::Assistant,
@@ -349,9 +353,18 @@ mod tests {
             id: "1".into(),
             name: "browser_click".into(),
             arguments: vec![
-                ToolArgument { name: "x".into(), value: " 120 ".into() },
-                ToolArgument { name: "y".into(), value: "88".into() },
-                ToolArgument { name: "submit".into(), value: "TRUE".into() },
+                ToolArgument {
+                    name: "x".into(),
+                    value: " 120 ".into(),
+                },
+                ToolArgument {
+                    name: "y".into(),
+                    value: "88".into(),
+                },
+                ToolArgument {
+                    name: "submit".into(),
+                    value: "TRUE".into(),
+                },
             ],
         };
         assert_eq!(call.int("x"), Some(120));

@@ -102,7 +102,9 @@ extern "C" fn log_trampoline(level: c_int, text: *const c_char, _ud: *mut c_void
         String::new()
     } else {
         // SAFETY: llama.cpp hands over a NUL-terminated, valid-for-the-call string.
-        unsafe { CStr::from_ptr(text) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(text) }
+            .to_string_lossy()
+            .into_owned()
     };
     logger(level, message.trim_end());
 }
@@ -162,7 +164,11 @@ impl Model {
         let mut buf = vec![0u8; 256];
         // SAFETY: buffer and length are valid for the call.
         let written = unsafe {
-            sys::cordial_model_desc(self.ptr.as_ptr(), buf.as_mut_ptr() as *mut c_char, buf.len())
+            sys::cordial_model_desc(
+                self.ptr.as_ptr(),
+                buf.as_mut_ptr() as *mut c_char,
+                buf.len(),
+            )
         };
         if written < 0 {
             return String::new();
@@ -296,7 +302,11 @@ impl Model {
             return None;
         }
         // SAFETY: NUL-terminated static vocabulary string.
-        Some(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+        Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 }
 
@@ -631,7 +641,9 @@ impl Mtmd {
             return "<__media__>".to_string();
         }
         // SAFETY: NUL-terminated static string.
-        unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
     }
 }
 

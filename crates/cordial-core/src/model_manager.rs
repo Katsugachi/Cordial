@@ -69,7 +69,9 @@ pub struct ModelPaths {
 pub enum ModelStatus {
     Ready(ModelPaths),
     /// Nothing usable yet; `missing_bytes` is the estimated download size.
-    Missing { missing_bytes: u64 },
+    Missing {
+        missing_bytes: u64,
+    },
     /// Weights are present but the projector is not, so images are unavailable.
     TextOnly(ModelPaths),
 }
@@ -171,9 +173,8 @@ impl ModelManager {
             }
         }
 
-        let weights = weights.ok_or_else(|| {
-            CoreError::ModelNotReady("the model file is missing".to_string())
-        })?;
+        let weights = weights
+            .ok_or_else(|| CoreError::ModelNotReady("the model file is missing".to_string()))?;
         Ok(ModelPaths {
             weights,
             projector: projector.filter(|path| is_complete(path)),
@@ -314,7 +315,9 @@ mod tests {
     fn default_files_point_at_the_hub() {
         let files = default_files();
         assert_eq!(files.len(), 2);
-        assert!(files[0].url.starts_with("https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF"));
+        assert!(files[0]
+            .url
+            .starts_with("https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF"));
         assert!(files[0].url.ends_with(DEFAULT_WEIGHTS));
         assert_eq!(files[1].kind, ModelKind::Projector);
     }

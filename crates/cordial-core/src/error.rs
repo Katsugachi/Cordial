@@ -10,7 +10,9 @@ pub enum CoreError {
     ModelNotReady(String),
     #[error("inference failed: {0}")]
     Inference(String),
-    #[error("the prompt does not fit the context window ({used} tokens needed, {available} available)")]
+    #[error(
+        "the prompt does not fit the context window ({used} tokens needed, {available} available)"
+    )]
     ContextOverflow { used: usize, available: usize },
     #[error("tool `{tool}` failed: {message}")]
     Tool { tool: String, message: String },

@@ -96,7 +96,13 @@ impl LlamaBackend {
         options: EngineOptions,
         events: EventSink,
         cancel: Arc<AtomicBool>,
-    ) -> Result<(Self, tokio::sync::oneshot::Receiver<Result<EngineInfo, CoreError>>), CoreError> {
+    ) -> Result<
+        (
+            Self,
+            tokio::sync::oneshot::Receiver<Result<EngineInfo, CoreError>>,
+        ),
+        CoreError,
+    > {
         let (command_tx, command_rx) = std::sync::mpsc::channel();
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
         let cancel_for_worker = Arc::clone(&cancel);
@@ -107,7 +113,9 @@ impl LlamaBackend {
             .spawn(move || {
                 worker_main(options, events, cancel_for_worker, command_rx, ready_tx);
             })
-            .map_err(|err| CoreError::Inference(format!("could not start inference thread: {err}")))?;
+            .map_err(|err| {
+                CoreError::Inference(format!("could not start inference thread: {err}"))
+            })?;
 
         Ok((
             Self {
@@ -198,7 +206,11 @@ fn worker_main(
         path: options.model_path.display().to_string(),
     });
 
-    let gpu_layers = if cordial_llama::BACKEND == "cpu" { 0 } else { -1 };
+    let gpu_layers = if cordial_llama::BACKEND == "cpu" {
+        0
+    } else {
+        -1
+    };
     let loaded = (|| -> Result<WorkerState, CoreError> {
         let model = Model::load(&options.model_path, gpu_layers)?;
         let threads = if options.threads > 0 {
@@ -309,7 +321,9 @@ fn run_generation(
         state.context.clear();
         state.cache_exact = false;
         state.cached_tokens.clear();
-        let prompt = request.prompt.replace(crate::prompt::DEFAULT_MEDIA_MARKER, &state.marker);
+        let prompt = request
+            .prompt
+            .replace(crate::prompt::DEFAULT_MEDIA_MARKER, &state.marker);
         state
             .context
             .eval_multimodal(mtmd, &prompt, &request.media, 0)
@@ -338,7 +352,8 @@ fn run_generation(
     }
 
     // 3. Sample until the model stops.
-    if state.sampler.is_none() || state.sampling.seed != request.sampling.seed
+    if state.sampler.is_none()
+        || state.sampling.seed != request.sampling.seed
         || state.sampling.temperature != request.sampling.temperature
         || state.sampling.top_k != request.sampling.top_k
     {
@@ -506,7 +521,10 @@ impl ScriptedBackend {
                 ScriptFailure::Failed => CoreError::Inference("scripted failure".to_string()),
             });
         }
-        let reply = self.replies.pop_front().unwrap_or_else(|| self.fallback.clone());
+        let reply = self
+            .replies
+            .pop_front()
+            .unwrap_or_else(|| self.fallback.clone());
         let prompt_tokens = request.prompt.chars().count() as u32 / 4;
         self.requests.push(request.clone());
 

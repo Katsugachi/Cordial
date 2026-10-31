@@ -138,10 +138,7 @@ pub struct EventSink {
 
 impl EventSink {
     /// Creates a sink plus the receiving end the UI (or a test) drains.
-    pub fn channel() -> (
-        Self,
-        tokio::sync::mpsc::UnboundedReceiver<AgentEvent>,
-    ) {
+    pub fn channel() -> (Self, tokio::sync::mpsc::UnboundedReceiver<AgentEvent>) {
         let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
         (
             Self {

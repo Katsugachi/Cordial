@@ -97,7 +97,11 @@ fn split_thinking(raw: &str) -> (Option<String>, String, bool) {
         } else {
             Some(thinking.to_string())
         };
-        (thinking, rest.trim_start_matches(['\n', ' ']).to_string(), false)
+        (
+            thinking,
+            rest.trim_start_matches(['\n', ' ']).to_string(),
+            false,
+        )
     } else {
         // Generation was cut off before the model closed its reasoning, which
         // means no answer was produced yet.
@@ -255,7 +259,8 @@ mod tests {
 
     #[test]
     fn reports_malformed_block() {
-        let raw = "go\n</think>\n<tool_call>\n<parameter=query>\nbroken\n</parameter>\n</tool_call>";
+        let raw =
+            "go\n</think>\n<tool_call>\n<parameter=query>\nbroken\n</parameter>\n</tool_call>";
         let parsed = parse_reply(raw, true);
         assert!(parsed.calls.is_empty());
         assert!(parsed.malformed.is_some());

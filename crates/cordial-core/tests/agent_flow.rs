@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use cordial_core::backend::{Backend, ScriptedBackend, ScriptFailure};
+use cordial_core::backend::{Backend, ScriptFailure, ScriptedBackend};
 use cordial_core::events::{AgentEvent, EventSink, StopReason};
 use cordial_core::permissions::PermissionPolicy;
 use cordial_core::session::{Attachment, AttachmentKind, Message, Role, Session};
@@ -32,7 +32,11 @@ impl Fixture {
         let scratch = base.join("scratch");
         std::fs::create_dir_all(&workspace).unwrap();
         std::fs::create_dir_all(&scratch).unwrap();
-        std::fs::write(workspace.join("notes.txt"), "The plan is to ship on Friday.").unwrap();
+        std::fs::write(
+            workspace.join("notes.txt"),
+            "The plan is to ship on Friday.",
+        )
+        .unwrap();
         std::fs::write(workspace.join("image.png"), [0x89, b'P', b'N', b'G']).unwrap();
         Self { workspace, scratch }
     }
@@ -141,9 +145,13 @@ async fn plain_answer_is_persisted_and_streamed() {
     assert!(events
         .iter()
         .any(|event| matches!(event, AgentEvent::TextDelta { .. })));
-    assert!(events
-        .iter()
-        .any(|event| matches!(event, AgentEvent::TurnFinished { stop: StopReason::Answered, .. })));
+    assert!(events.iter().any(|event| matches!(
+        event,
+        AgentEvent::TurnFinished {
+            stop: StopReason::Answered,
+            ..
+        }
+    )));
 }
 
 #[tokio::test]

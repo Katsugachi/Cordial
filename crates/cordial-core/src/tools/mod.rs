@@ -57,7 +57,9 @@ impl ToolSpec {
         let name = serde_json::to_string(self.name).unwrap_or_else(|_| "\"\"".into());
         let description = serde_json::to_string(self.description).unwrap_or_else(|_| "\"\"".into());
         let parameters = serde_json::to_string(&self.parameters).unwrap_or_else(|_| "{}".into());
-        format!("{{\"name\": {name}, \"description\": {description}, \"parameters\": {parameters}}}")
+        format!(
+            "{{\"name\": {name}, \"description\": {description}, \"parameters\": {parameters}}}"
+        )
     }
 }
 
@@ -391,10 +393,7 @@ impl ToolRuntime {
         let media = match snapshot.save_png(&self.scratch.join("screenshots")).await {
             Ok(path) => vec![path],
             Err(err) => {
-                return ToolOutcome::fail(
-                    "screenshot could not be saved",
-                    format!("Error: {err}"),
-                )
+                return ToolOutcome::fail("screenshot could not be saved", format!("Error: {err}"))
             }
         };
         let text = format!(
@@ -404,7 +403,10 @@ impl ToolRuntime {
             crate::util::truncate_chars(&snapshot.text, self.effort.fetch_chars())
         );
         ToolOutcome::ok(
-            format!("{} — {}x{}", snapshot.title, snapshot.viewport.0, snapshot.viewport.1),
+            format!(
+                "{} — {}x{}",
+                snapshot.title, snapshot.viewport.0, snapshot.viewport.1
+            ),
             text,
         )
         .with_media(media)

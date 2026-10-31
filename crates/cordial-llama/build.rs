@@ -63,7 +63,15 @@ fn main() {
     let want_cuda = flag("CORDIAL_GGML_CUDA") || cfg!(feature = "cuda");
 
     let build_dir = out_dir.join("llama-build");
-    configure(&src, &build_dir, &target, want_opencl, want_vulkan, want_cuda, &out_dir);
+    configure(
+        &src,
+        &build_dir,
+        &target,
+        want_opencl,
+        want_vulkan,
+        want_cuda,
+        &out_dir,
+    );
     build(&build_dir);
 
     link(&build_dir, is_windows, is_apple, is_msvc);
@@ -86,7 +94,10 @@ fn main() {
 }
 
 fn flag(key: &str) -> bool {
-    matches!(env::var(key).ok().as_deref(), Some("1") | Some("true") | Some("on"))
+    matches!(
+        env::var(key).ok().as_deref(),
+        Some("1") | Some("true") | Some("on")
+    )
 }
 
 // ------------------------------------------------------------------ source
@@ -115,7 +126,8 @@ fn resolve_source(out_dir: &Path) -> PathBuf {
 
     fs::create_dir_all(&cache_root).expect("create llama cache dir");
     let tarball = cache_root.join(format!("llama.cpp-{LLAMA_TAG}.tar.gz"));
-    let url = format!("https://codeload.github.com/ggml-org/llama.cpp/tar.gz/refs/tags/{LLAMA_TAG}");
+    let url =
+        format!("https://codeload.github.com/ggml-org/llama.cpp/tar.gz/refs/tags/{LLAMA_TAG}");
     download_verified(&url, &tarball, Some(LLAMA_SHA256));
 
     unpack(&tarball, &cache_root);
@@ -297,7 +309,10 @@ fn windows_opencl(out_dir: &Path) -> (PathBuf, PathBuf) {
             fs::create_dir_all(root.join("lib")).ok();
             fs::copy(&found, &loader_lib).ok();
         }
-        assert!(loader_lib.exists(), "OpenCL ICD loader library was not produced");
+        assert!(
+            loader_lib.exists(),
+            "OpenCL ICD loader library was not produced"
+        );
     }
 
     (headers.join("OpenCL"), loader_lib)
@@ -323,7 +338,10 @@ fn run(mut cmd: Command, what: &str) {
              Install CMake (https://cmake.org/download) and set CMAKE=/path/to/cmake if it is not on PATH.\n\
              Command: {display}"
         ));
-    assert!(status.success(), "{what} failed with {status}.\nCommand: {display}");
+    assert!(
+        status.success(),
+        "{what} failed with {status}.\nCommand: {display}"
+    );
 }
 
 // ------------------------------------------------------------------- links

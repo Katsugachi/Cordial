@@ -282,7 +282,9 @@ pub fn system_prompt(
     prompt.push_str("Answering\n");
     prompt.push_str("- Lead with the answer, then at most three short paragraphs of support. No preamble, no restating the question, no filler.\n");
     prompt.push_str("- Use plain words and short sentences. No emoji, no bold headers, no bullet lists unless you are listing things.\n");
-    prompt.push_str("- If something is uncertain, say so in one sentence and say how you would check it.\n\n");
+    prompt.push_str(
+        "- If something is uncertain, say so in one sentence and say how you would check it.\n\n",
+    );
 
     prompt.push_str("Facts\n");
     prompt.push_str(&format!("- Today is {today}. Anything that changes (news, prices, sport, releases, people, places) needs a web check first.\n"));
@@ -300,7 +302,9 @@ pub fn system_prompt(
     prompt.push_str("- When you have enough information, answer in plain text with no tool call. Stop once the question is answered.\n\n");
 
     prompt.push_str("Style\n");
-    prompt.push_str("- Be warm and direct, like a capable colleague. Answer the question, not the person.\n");
+    prompt.push_str(
+        "- Be warm and direct, like a capable colleague. Answer the question, not the person.\n",
+    );
     prompt.push_str("- Ask a question back only when the task cannot proceed without it.\n");
     prompt.push_str("- If the user attaches an image, say what you actually see in it before answering the question.\n\n");
 
@@ -395,7 +399,9 @@ mod tests {
             .map(|offset| offset + first + 1)
             .unwrap();
         assert!(first < second);
-        assert!(rendered.text.contains("user\n<__media__>\n<__media__>\ncompare"));
+        assert!(rendered
+            .text
+            .contains("user\n<__media__>\n<__media__>\ncompare"));
     }
 
     #[test]
@@ -415,22 +421,27 @@ mod tests {
         let rendered = render(&options("Sys.", &[], &messages));
         // keep_image_turns = 2 keeps the newest two user turns.
         assert_eq!(rendered.media.len(), 2);
-        assert!(rendered.media.iter().all(|p| p != Path::new("/tmp/one.png")));
+        assert!(rendered
+            .media
+            .iter()
+            .all(|p| p != Path::new("/tmp/one.png")));
     }
 
     #[test]
     fn current_turn_keeps_its_thinking() {
-        let mut assistant = Message::assistant("The answer is 42.", Some("I counted.".into()), vec![]);
+        let mut assistant =
+            Message::assistant("The answer is 42.", Some("I counted.".into()), vec![]);
         assistant.id = "a".into();
         let messages = vec![Message::user("q", vec![]), assistant];
         let rendered = render(&options("Sys.", &[], &messages));
-        assert!(rendered.text.contains("assistant\n<think>I counted.</think>The answer is 42."));
+        assert!(rendered
+            .text
+            .contains("assistant\n<think>I counted.</think>The answer is 42."));
     }
 
     #[test]
     fn older_turns_drop_their_thinking_but_keep_the_tags() {
-        let mut assistant =
-            Message::assistant("<think>secret plan</think>\nParis.", None, vec![]);
+        let mut assistant = Message::assistant("<think>secret plan</think>\nParis.", None, vec![]);
         assistant.id = "a".into();
         let messages = vec![
             Message::user("first", vec![]),
@@ -489,7 +500,9 @@ mod tests {
         let mut opts = options("Sys.", &[], &messages);
         opts.thinking = false;
         let rendered = render(&opts);
-        assert!(rendered.text.ends_with("<|im_start|>assistant\n<think></think>"));
+        assert!(rendered
+            .text
+            .ends_with("<|im_start|>assistant\n<think></think>"));
     }
 
     #[test]

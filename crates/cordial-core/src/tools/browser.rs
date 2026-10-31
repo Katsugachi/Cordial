@@ -147,8 +147,8 @@ impl BrowserSession {
             let Some(message) = next else {
                 return Err(CoreError::Other("browser connection ended".to_string()));
             };
-            let message = message
-                .map_err(|err| CoreError::Other(format!("browser socket error: {err}")))?;
+            let message =
+                message.map_err(|err| CoreError::Other(format!("browser socket error: {err}")))?;
             match message {
                 Message::Text(text) => {
                     let Ok(value) = serde_json::from_str::<Value>(text.as_str()) else {
@@ -173,7 +173,9 @@ impl BrowserSession {
                         .map_err(|err| CoreError::Other(err.to_string()))?;
                 }
                 Message::Close(_) => {
-                    return Err(CoreError::Other("browser closed the connection".to_string()))
+                    return Err(CoreError::Other(
+                        "browser closed the connection".to_string(),
+                    ))
                 }
                 _ => {}
             }
@@ -220,11 +222,11 @@ impl BrowserSession {
     /// Navigates and returns a fresh snapshot.
     pub async fn navigate(&mut self, url: &str) -> Result<PageSnapshot, CoreError> {
         let target = normalise(url)?;
-        let result = self
-            .call("Page.navigate", json!({ "url": target }))
-            .await?;
+        let result = self.call("Page.navigate", json!({ "url": target })).await?;
         if let Some(error) = result.get("errorText").and_then(Value::as_str) {
-            return Err(CoreError::Other(format!("could not load {target}: {error}")));
+            return Err(CoreError::Other(format!(
+                "could not load {target}: {error}"
+            )));
         }
         self.wait_until_ready().await;
         self.snapshot().await
@@ -244,7 +246,10 @@ impl BrowserSession {
             .unwrap_or_else(|| json!({ "title": "", "url": "", "text": "" }));
 
         let screenshot = self
-            .call("Page.captureScreenshot", json!({ "format": "png", "captureBeyondViewport": false }))
+            .call(
+                "Page.captureScreenshot",
+                json!({ "format": "png", "captureBeyondViewport": false }),
+            )
             .await?;
         let data = screenshot
             .get("data")
@@ -324,7 +329,10 @@ impl BrowserSession {
         .await?;
         self.call(
             "Input.dispatchMouseEvent",
-            merge(base.clone(), json!({ "type": "mousePressed", "buttons": 1 })),
+            merge(
+                base.clone(),
+                json!({ "type": "mousePressed", "buttons": 1 }),
+            ),
         )
         .await?;
         self.call(
@@ -369,7 +377,8 @@ impl BrowserSession {
             }
         }
 
-        self.call("Input.insertText", json!({ "text": text })).await?;
+        self.call("Input.insertText", json!({ "text": text }))
+            .await?;
         if submit {
             self.press_enter().await?;
         }
@@ -396,8 +405,11 @@ impl BrowserSession {
             merge(key.clone(), json!({ "type": "char" })),
         )
         .await?;
-        self.call("Input.dispatchKeyEvent", merge(key, json!({ "type": "keyUp" })))
-            .await?;
+        self.call(
+            "Input.dispatchKeyEvent",
+            merge(key, json!({ "type": "keyUp" })),
+        )
+        .await?;
         Ok(())
     }
 
@@ -539,7 +551,8 @@ pub fn find_browser() -> Option<PathBuf> {
             )));
         }
         if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join("Applications/Google Chrome.app/Contents/MacOS/Google Chrome"));
+            candidates
+                .push(home.join("Applications/Google Chrome.app/Contents/MacOS/Google Chrome"));
         }
     }
     #[cfg(target_os = "windows")]

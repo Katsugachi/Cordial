@@ -72,7 +72,11 @@ pub fn list(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         let path = entry.path();
         let is_dir = path.is_dir();
         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        names.push((entry.file_name().to_string_lossy().into_owned(), is_dir, size));
+        names.push((
+            entry.file_name().to_string_lossy().into_owned(),
+            is_dir,
+            size,
+        ));
     }
     names.sort_by(|a, b| (b.1, a.0.to_lowercase()).cmp(&(a.1, b.0.to_lowercase())));
 
@@ -166,7 +170,11 @@ pub fn resolve(workspace: &Path, raw: &str) -> Result<PathBuf, CoreError> {
         ));
     }
     let joined = normalise(&workspace.join(candidate));
-    let root = normalise(&workspace.canonicalize().unwrap_or_else(|_| workspace.to_path_buf()));
+    let root = normalise(
+        &workspace
+            .canonicalize()
+            .unwrap_or_else(|_| workspace.to_path_buf()),
+    );
     if !joined.starts_with(&root) {
         return Err(CoreError::Other(
             "that path is outside the workspace folder".to_string(),
