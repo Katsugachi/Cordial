@@ -128,6 +128,8 @@ jobs:
           find /tmp/llama-build -name "libllama.a" | grep -q .
   live-model:
     name: Behaviour suite (real LFM3-VL-2B)
+    permissions:
+      contents: write
     # Same job as .github/workflows/live.yml. Reachable from a branch two ways:
     # a manual dispatch with `live: true`, or a commit that asks for it with
     # `[live]` in the message (GitHub only lists workflows that exist on the
@@ -150,4 +152,18 @@ jobs:
           path: ~/.cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Run the prompt suite
-        run: scripts/ci/report.sh cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            2>&1 | tee /tmp/live.log
+      - name: Publish the transcript
+        if: always()
+        run: |
+          python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
+          git config user.name "cordial-live"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/live-report.md
+          git diff --cached --quiet || {
+            git commit -m "docs: live model transcript"
+            git push
+          }

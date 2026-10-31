@@ -142,6 +142,10 @@ behaviour: correct facts, arithmetic, reading a workspace file, honesty when the
 web is off, brevity, absence of filler, and recognising the colour of an attached
 image. It is the suite to run after changing the system prompt or sampler.
 
+Each live run publishes what the model actually said to
+[`docs/live-report.md`](docs/live-report.md), so prompt quality can be reviewed
+without a local GPU or a 1.3 GB download.
+
 ## Privacy
 
 Nothing is sent anywhere except search and page requests the agent makes on your

@@ -233,11 +233,26 @@ impl ModelManager {
             tokio::fs::File::create(&partial).await?
         };
 
-        // Hash from the start so resumed files still verify.
+        events.emit(AgentEvent::DownloadProgress {
+            file: file.name.to_string(),
+            received,
+            total,
+        });
+
+        // Hash from the start so resumed files still verify, in chunks: a
+        // 1 GB weights file must never be read into memory at once.
         let mut hasher = Sha256::new();
         if received > 0 {
-            let existing = tokio::fs::read(&partial).await?;
-            hasher.update(&existing);
+            use tokio::io::AsyncReadExt;
+            let mut existing = tokio::fs::File::open(&partial).await?;
+            let mut buffer = vec![0u8; 1024 * 1024];
+            loop {
+                let read = existing.read(&mut buffer).await?;
+                if read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..read]);
+            }
         }
 
         let mut stream = response.bytes_stream();

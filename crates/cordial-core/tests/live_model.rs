@@ -67,7 +67,11 @@ mod tempdir {
 }
 
 impl Live {
+    /// Loads the model. Returns `None` only when no model was requested at all;
+    /// when `CORDIAL_MODEL_DIR` is pinned (as CI does) a missing or unloadable
+    /// model is a failure, so a broken release cannot pass by skipping.
     async fn boot() -> Option<Self> {
+        let pinned = std::env::var("CORDIAL_MODEL_DIR").is_ok();
         let model_dir = std::env::var("CORDIAL_MODEL_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
@@ -82,8 +86,12 @@ impl Live {
 
         let paths = match manager.ensure_defaults(&sink).await {
             Ok(paths) => paths,
+            Err(err) if pinned => {
+                sink_task.abort();
+                panic!("CORDIAL_MODEL_DIR is set but the model is unusable: {err}");
+            }
             Err(err) => {
-                eprintln!("skipping live tests: {err}");
+                eprintln!("skipping live tests (no CORDIAL_MODEL_DIR): {err}");
                 sink_task.abort();
                 return None;
             }
@@ -109,6 +117,10 @@ impl Live {
                 info.context_tokens / 1024,
                 info.vision
             ),
+            Ok(Err(err)) if pinned => {
+                sink_task.abort();
+                panic!("CORDIAL_MODEL_DIR is set but the model did not load: {err}");
+            }
             Ok(Err(err)) => {
                 eprintln!("skipping live tests, model did not load: {err}");
                 sink_task.abort();
@@ -251,6 +263,7 @@ fn assert_helpful(answer: &str, max_words: usize) {
 #[ignore = "downloads the model and runs inference"]
 async fn answers_a_plain_factual_question_briefly() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
     let (_, answer) = live
@@ -272,6 +285,7 @@ async fn answers_a_plain_factual_question_briefly() {
 #[ignore = "downloads the model and runs inference"]
 async fn reasons_through_a_short_arithmetic_question() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
     let (_, answer) = live
@@ -293,6 +307,7 @@ async fn reasons_through_a_short_arithmetic_question() {
 #[ignore = "downloads the model and runs inference"]
 async fn uses_the_file_tool_and_quotes_the_workspace() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
     let (session, answer) = live
@@ -321,6 +336,7 @@ async fn uses_the_file_tool_and_quotes_the_workspace() {
 #[ignore = "downloads the model and runs inference"]
 async fn does_not_invent_facts_when_the_web_is_off() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
     let (_, answer) = live
@@ -354,6 +370,7 @@ async fn does_not_invent_facts_when_the_web_is_off() {
 #[ignore = "downloads the model and runs inference"]
 async fn low_effort_answers_in_one_pass() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
     let (_, answer) = live
@@ -376,6 +393,7 @@ async fn low_effort_answers_in_one_pass() {
 #[ignore = "downloads the model and runs inference"]
 async fn sees_the_colour_of_an_attached_image() {
     let Some(mut live) = Live::boot().await else {
+        eprintln!("no model available: live assertions were not run");
         return;
     };
 
