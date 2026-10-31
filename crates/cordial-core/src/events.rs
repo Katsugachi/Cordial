@@ -74,6 +74,9 @@ pub enum AgentEvent {
         ok: bool,
         summary: String,
         detail: String,
+        /// Data URL of the first image the tool produced (browser screenshots),
+        /// so the window can show what the model is looking at.
+        thumbnail: Option<String>,
     },
     ToolCallDenied {
         turn_id: String,

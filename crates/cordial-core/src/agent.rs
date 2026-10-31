@@ -388,6 +388,7 @@ impl<'a> Agent<'a> {
             ok: outcome.ok,
             summary: outcome.summary.clone(),
             detail: truncate_chars(&outcome.text, 700),
+            thumbnail: thumbnail_for(&outcome.media),
         });
 
         let mut message = Message::tool_result(call.id.clone(), outcome.text.clone());
@@ -482,4 +483,32 @@ impl<'a> Agent<'a> {
             .map(|flag| flag.load(Ordering::Relaxed))
             .unwrap_or(false)
     }
+}
+
+/// Encodes the first image a tool produced as a data URL for the UI.
+///
+/// Screenshots stay under a few hundred kilobytes; anything bigger is skipped so
+/// a huge image can never stall the event stream.
+fn thumbnail_for(media: &[std::path::PathBuf]) -> Option<String> {
+    use base64::Engine as _;
+
+    let path = media.first()?;
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() > 900_000 {
+        return None;
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("png")
+        .to_ascii_lowercase();
+    let mime = match extension.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => "image/png",
+    };
+    Some(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
 }

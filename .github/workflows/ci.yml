@@ -29,10 +29,15 @@ jobs:
       - name: Check formatting
         run: scripts/ci/report.sh cargo fmt --all -- --check
 
-  clippy:
-    name: Clippy
+  rust:
+    name: Rust (clippy, tests)
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    env:
+      # Standard private-repo runners have two cores; keep both cargo and the
+      # llama.cpp build from fighting over memory.
+      CARGO_BUILD_JOBS: "2"
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,20 +52,6 @@ jobs:
         run: mkdir -p ui/dist && printf '<!doctype html><title>Cordial</title>' > ui/dist/index.html
       - name: Clippy
         run: scripts/ci/report.sh cargo clippy --workspace --all-targets -- -D warnings
-
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: cordial-rust
-          cache-on-failure: true
-      - name: Placeholder frontend bundle
-        run: mkdir -p ui/dist && printf '<!doctype html><title>Cordial</title>' > ui/dist/index.html
       - name: Tests
         run: scripts/ci/report.sh cargo test --workspace --all-targets
 

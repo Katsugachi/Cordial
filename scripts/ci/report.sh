@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs a command and, on failure, republishes the tail of its output as GitHub
+# Runs a command and, on failure, republishes its diagnostics as GitHub
 # annotations. Annotations travel through the checks API, so failures stay
 # readable even where job logs cannot be downloaded.
 set -uo pipefail
@@ -13,13 +13,27 @@ cat "$log"
 if [ "$status" -ne 0 ]; then
   echo
   echo "==== failure summary (also published as annotations) ===="
-  # Keep the annotations under GitHub's 50-per-step budget and escape the
-  # characters the workflow-command parser treats specially.
-  tail -n 40 "$log" \
-    | sed -e 's/%/%25/g' -e 's/\r/%0D/g' \
-    | while IFS= read -r line; do
-        printf '::error::%s\n' "$line"
-      done
+  free -m 2>/dev/null | head -3 || true
+  df -h . 2>/dev/null | tail -1 || true
+
+  annotated=0
+
+  # Rustc/clippy diagnostics first: they carry the real message and its location.
+  while IFS= read -r line; do
+    printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g' -e 's/\r/%0D/g')"
+    annotated=$((annotated + 1))
+    [ "$annotated" -ge 24 ] && break
+  done < <(grep -E '^(error|warning)(\[|:)|^ *--> |^error: could not compile' "$log" | head -24 || true)
+
+  # Then the tail, which catches failures without diagnostics (killed builds).
+  if [ "$annotated" -lt 40 ]; then
+    remaining=$((40 - annotated))
+    tail -n "$remaining" "$log" \
+      | sed -e 's/%/%25/g' -e 's/\r/%0D/g' \
+      | while IFS= read -r line; do
+          printf '::error::%s\n' "$line"
+        done
+  fi
 fi
 
 rm -f "$log"
