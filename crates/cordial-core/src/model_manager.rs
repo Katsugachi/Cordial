@@ -89,10 +89,12 @@ pub struct ModelManager {
 
 impl ModelManager {
     pub fn new(dir: impl Into<PathBuf>) -> Result<Self, CoreError> {
+        // No overall request timeout: the weights file is over a gigabyte and a
+        // slow connection is not an error. Only connecting is bounded.
         let client = Client::builder()
             .user_agent("Cordial/0.1 (+https://github.com/Katsugachi/Cordial)")
-            .timeout(Duration::from_secs(60))
             .connect_timeout(Duration::from_secs(20))
+            .pool_idle_timeout(Duration::from_secs(60))
             .build()
             .map_err(|err| CoreError::Network(err.to_string()))?;
         Ok(Self {
@@ -181,11 +183,57 @@ impl ModelManager {
         })
     }
 
+    /// Downloads one file, resuming across interruptions.
+    ///
+    /// A gigabyte over a home connection will hiccup: each attempt picks up from
+    /// the bytes already on disk, and the finished file is only moved into place
+    /// once its checksum matches the one the CDN advertises.
     async fn download(&self, file: &ModelFile, events: &EventSink) -> Result<PathBuf, CoreError> {
+        const ATTEMPTS: u32 = 4;
+
         let target = self.dir.join(file.name);
         let partial = self.dir.join(format!("{}.part", file.name));
 
-        let mut received = match tokio::fs::metadata(&partial).await {
+        let mut last_error: Option<CoreError> = None;
+        for attempt in 1..=ATTEMPTS {
+            match self.download_once(file, &partial, events).await {
+                Ok(()) => {
+                    tokio::fs::rename(&partial, &target).await?;
+                    events.emit(AgentEvent::DownloadFinished {
+                        file: file.name.to_string(),
+                        path: target.display().to_string(),
+                    });
+                    return Ok(target);
+                }
+                Err(err) => {
+                    if attempt == ATTEMPTS {
+                        last_error = Some(err);
+                        break;
+                    }
+                    events.emit(AgentEvent::Notice {
+                        message: format!(
+                            "Download of {} was interrupted (attempt {attempt} of {ATTEMPTS}); resuming.",
+                            file.name
+                        ),
+                    });
+                    tokio::time::sleep(Duration::from_secs(u64::from(attempt) * 3)).await;
+                    last_error = Some(err);
+                }
+            }
+        }
+
+        Err(last_error
+            .unwrap_or_else(|| CoreError::Network(format!("could not download {}", file.name))))
+    }
+
+    /// One attempt at fetching the remaining bytes into `partial`.
+    async fn download_once(
+        &self,
+        file: &ModelFile,
+        partial: &Path,
+        events: &EventSink,
+    ) -> Result<(), CoreError> {
+        let mut received = match tokio::fs::metadata(partial).await {
             Ok(meta) => meta.len(),
             Err(_) => 0,
         };
@@ -207,6 +255,7 @@ impl ModelManager {
             )));
         }
 
+        // Hugging Face advertises the LFS SHA-256 in the ETag.
         let expected_sha = response
             .headers()
             .get("x-linked-etag")
@@ -227,10 +276,10 @@ impl ModelManager {
         let mut handle = if append {
             tokio::fs::OpenOptions::new()
                 .append(true)
-                .open(&partial)
+                .open(partial)
                 .await?
         } else {
-            tokio::fs::File::create(&partial).await?
+            tokio::fs::File::create(partial).await?
         };
 
         events.emit(AgentEvent::DownloadProgress {
@@ -239,12 +288,12 @@ impl ModelManager {
             total,
         });
 
-        // Hash from the start so resumed files still verify, in chunks: a
-        // 1 GB weights file must never be read into memory at once.
+        // Hash from the start so resumed files still verify, in chunks: a 1 GB
+        // weights file must never be read into memory at once.
         let mut hasher = Sha256::new();
         if received > 0 {
             use tokio::io::AsyncReadExt;
-            let mut existing = tokio::fs::File::open(&partial).await?;
+            let mut existing = tokio::fs::File::open(partial).await?;
             let mut buffer = vec![0u8; 1024 * 1024];
             loop {
                 let read = existing.read(&mut buffer).await?;
@@ -262,7 +311,7 @@ impl ModelManager {
             handle.write_all(&chunk).await?;
             hasher.update(&chunk);
             received += chunk.len() as u64;
-            if last_emit.elapsed() >= Duration::from_millis(200) {
+            if last_emit.elapsed() >= Duration::from_millis(250) {
                 last_emit = Instant::now();
                 events.emit(AgentEvent::DownloadProgress {
                     file: file.name.to_string(),
@@ -282,20 +331,16 @@ impl ModelManager {
                 .map(|byte| format!("{byte:02x}"))
                 .collect();
             if digest != expected {
-                let _ = tokio::fs::remove_file(&partial).await;
+                // The bytes are wrong, so resuming from them would never work.
+                let _ = tokio::fs::remove_file(partial).await;
                 return Err(CoreError::Network(format!(
-                    "checksum mismatch for {} (the download was corrupted, try again)",
+                    "checksum mismatch for {} (the download was corrupted, restarting)",
                     file.name
                 )));
             }
         }
 
-        tokio::fs::rename(&partial, &target).await?;
-        events.emit(AgentEvent::DownloadFinished {
-            file: file.name.to_string(),
-            path: target.display().to_string(),
-        });
-        Ok(target)
+        Ok(())
     }
 
     /// Removes downloaded weights so the next launch starts clean.

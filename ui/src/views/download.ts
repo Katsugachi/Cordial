@@ -6,6 +6,25 @@ const WEIGHTS = "LFM3-VL-2B-Q4_K_M.gguf";
 const PROJECTOR = "mmproj-LFM3-VL-2B-Q8_0.gguf";
 
 export function downloadHtml(state: AppState): string {
+  const loading = state.phase === "loading" && !state.download;
+  if (loading) {
+    return `<div class="download">
+      <div class="download__card">
+        <span class="download__logo">${logoMark(40)}</span>
+        <h1>Cordial</h1>
+        <p>Loading ${escapeHtml(state.model.description || "LFM3-VL-2B")} into memory. This takes a few seconds on the first launch.</p>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Loading the model">${Array.from(
+          { length: 24 },
+          () => `<span class="progress__bar"><span class="progress__fill" style="--fill:0.18"></span></span>`,
+        ).join("")}</div>
+        <div class="mono" style="font-size:12px">Reading weights · ${escapeHtml(state.model.backend.toUpperCase())}</div>
+        <div class="download__actions">
+          <button class="ghost-button" data-action="open-settings">Settings</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   const progress = state.download;
   const total = progress?.total && progress.total > 0 ? progress.total : null;
   const share = progress && total ? Math.min(1, progress.received / total) : 0;

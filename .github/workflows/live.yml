@@ -20,6 +20,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
       CORDIAL_PORTABLE_CPU: "1"
+      CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,9 +31,21 @@ jobs:
       - name: Cache the weights
         uses: actions/cache@v4
         with:
-          path: ~/.cordial-models
+          path: ${{ runner.temp }}/cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Run the suite
-        env:
-          CORDIAL_MODEL_DIR: ~/.cordial-models
-        run: scripts/ci/report.sh cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            2>&1 | tee /tmp/live.log
+      - name: Publish the transcript
+        if: always()
+        run: |
+          python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
+          git config user.name "cordial-live"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/live-report.md
+          git diff --cached --quiet || {
+            git commit -m "docs: live model transcript"
+            git push
+          }

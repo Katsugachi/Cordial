@@ -84,8 +84,11 @@ function assistantBlock(message: Message, tools: ToolView[]): string {
   const body = message.content.trim()
     ? `<div class="prose">${renderMarkdown(message.content)}</div>`
     : "";
+  const copy = message.content.trim()
+    ? `<button class="msg__action" data-action="copy" data-id="${escapeHtml(message.id)}">Copy</button>`
+    : "";
   return `<article class="msg msg--assistant">
-    <div class="msg__role">${logoMark(14, "msg__role-mark")} Cordial</div>
+    <div class="msg__role">${logoMark(14, "msg__role-mark")} Cordial ${copy}</div>
     ${thinkingBlock(message.thinking ?? "", false)}
     ${body}
     ${cards}

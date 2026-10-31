@@ -148,6 +148,19 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
     element.style.height = `${Math.min(200, element.scrollHeight)}px`;
   }
 
+  /** Quiet announcement for screen readers. */
+  function announce(text: string): void {
+    let region = document.getElementById("announcer");
+    if (!region) {
+      region = document.createElement("div");
+      region.id = "announcer";
+      region.className = "sr-only";
+      region.setAttribute("aria-live", "polite");
+      document.body.append(region);
+    }
+    region.textContent = text;
+  }
+
   // -------------------------------------------------------------- settings
 
   function openSettings(): void {
@@ -367,6 +380,17 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       case "open-settings":
         openSettings();
         break;
+      case "copy": {
+        const id = target.dataset.id;
+        const message = state.session?.messages.find((candidate) => candidate.id === id);
+        if (message) {
+          void navigator.clipboard
+            ?.writeText(message.content)
+            .then(() => announce("Copied to the clipboard."))
+            .catch(() => announce("Copy failed. Select the text instead."));
+        }
+        break;
+      }
       case "download":
         state.downloadError = null;
         render();
