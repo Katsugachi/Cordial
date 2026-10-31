@@ -401,8 +401,14 @@ mod tests {
         assert_eq!(normalise_url("not a url"), None);
         assert_eq!(normalise_url("ftp://example.com"), None);
         assert_eq!(normalise_url("javascript://alert(1)"), None);
-        assert_eq!(normalise_url("example.com:8080/path"), Some("https://example.com:8080/path".to_string()));
-        assert_eq!(normalise_url("https://example.com/a?b=c"), Some("https://example.com/a?b=c".to_string()));
+        assert_eq!(
+            normalise_url("example.com:8080/path"),
+            Some("https://example.com:8080/path".to_string())
+        );
+        assert_eq!(
+            normalise_url("https://example.com/a?b=c"),
+            Some("https://example.com/a?b=c".to_string())
+        );
     }
 
     #[test]
