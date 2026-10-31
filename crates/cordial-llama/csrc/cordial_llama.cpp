@@ -188,12 +188,14 @@ int32_t cordial_ctx_pos_max(const cordial_ctx * ctx) {
     return static_cast<int32_t>(llama_memory_seq_pos_max(mem, 0));
 }
 
-void cordial_ctx_trim(cordial_ctx * ctx, int32_t n_keep) {
+int32_t cordial_ctx_trim(cordial_ctx * ctx, int32_t n_keep) {
     if (ctx == nullptr) {
-        return;
+        return 0;
     }
     llama_memory_t mem = llama_get_memory(ctx->ctx);
-    llama_memory_seq_rm(mem, 0, n_keep, -1);
+    // Hybrid models (short-convolution layers such as LFM3) cannot drop part of
+    // their recurrent state; the caller has to start the sequence again.
+    return llama_memory_seq_rm(mem, 0, n_keep, -1) ? 1 : 0;
 }
 
 void cordial_ctx_clear(cordial_ctx * ctx) {

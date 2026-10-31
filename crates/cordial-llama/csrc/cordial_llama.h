@@ -57,7 +57,9 @@ cordial_ctx * cordial_ctx_new(cordial_model * m, uint32_t n_ctx, uint32_t n_batc
 void     cordial_ctx_free(cordial_ctx * ctx);
 uint32_t cordial_ctx_n_ctx(const cordial_ctx * ctx);
 int32_t  cordial_ctx_pos_max(const cordial_ctx * ctx); // -1 when nothing is cached
-void     cordial_ctx_trim(cordial_ctx * ctx, int32_t n_keep); // drop KV from n_keep onwards
+// Drops cached positions from n_keep onwards. Returns 1 on success, 0 when the
+// model's memory cannot be trimmed (hybrid/recurrent models).
+int32_t  cordial_ctx_trim(cordial_ctx * ctx, int32_t n_keep);
 void     cordial_ctx_clear(cordial_ctx * ctx);
 
 // --------------------------------------------------------------- tokenizer

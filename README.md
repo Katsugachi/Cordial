@@ -82,8 +82,10 @@ On first launch Cordial downloads the model into your app-data folder:
 | Windows | `%APPDATA%\Cordial\models` |
 | Linux | `~/.local/share/Cordial/models` |
 
-Downloads resume if interrupted and verify against the checksum the CDN
-advertises. If you already have a GGUF, point **Settings → Model paths** at it.
+Downloads resume if interrupted and are verified against the SHA-256 Hugging
+Face publishes for the file (pinned in `crates/cordial-core/src/model_manager.rs`,
+not read from a response header). If you already have a GGUF, point
+**Settings → Model paths** at it.
 
 ## Build from source
 

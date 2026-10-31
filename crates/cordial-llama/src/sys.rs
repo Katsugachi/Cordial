@@ -69,7 +69,7 @@ extern "C" {
     pub fn cordial_ctx_free(ctx: *mut CordialCtx);
     pub fn cordial_ctx_n_ctx(ctx: *const CordialCtx) -> u32;
     pub fn cordial_ctx_pos_max(ctx: *const CordialCtx) -> i32;
-    pub fn cordial_ctx_trim(ctx: *mut CordialCtx, n_keep: i32);
+    pub fn cordial_ctx_trim(ctx: *mut CordialCtx, n_keep: i32) -> i32;
     pub fn cordial_ctx_clear(ctx: *mut CordialCtx);
 
     pub fn cordial_tokenize(

@@ -408,9 +408,13 @@ impl Context {
     }
 
     /// Drops everything cached from `n_keep` onwards, keeping the shared prefix.
-    pub fn trim(&mut self, n_keep: u32) {
+    ///
+    /// Returns false when the model cannot drop part of its state. LFM3 mixes
+    /// short convolutions with attention, so its recurrent layers cannot be
+    /// rewound: callers must then [`Context::clear`] and evaluate from zero.
+    pub fn trim(&mut self, n_keep: u32) -> bool {
         // SAFETY: as above.
-        unsafe { sys::cordial_ctx_trim(self.ptr.as_ptr(), n_keep as i32) };
+        unsafe { sys::cordial_ctx_trim(self.ptr.as_ptr(), n_keep as i32) != 0 }
     }
 
     pub fn clear(&mut self) {

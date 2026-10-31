@@ -74,14 +74,28 @@ Three guards live in the loop rather than in callers:
   with the tool list removed and an instruction to summarise, so the user always
   gets prose.
 
-## KV reuse
+## KV reuse, and why LFM3 is special
 
 `Backend::generate` keeps the exact token sequence that was decoded. On the next
 turn the prompt shares a prefix with it (system prompt, tool schemas, prior
-turns), so the worker trims the cache to the common prefix and decodes only the
-new suffix. Without this, every follow-up question in a 128k context would cost a
-full prompt evaluation. Image turns are the exception: `mtmd` owns those
-embeddings, so a turn with images clears the cache and starts fresh.
+turns), so the worker decodes only the new suffix. Without this, every follow-up
+question in a 128k context would cost a full prompt evaluation.
+
+Two details come from LFM3's architecture rather than from llama.cpp's defaults:
+
+1. **The memory, not the harness, owns positions.** LFM3-VL uses M-RoPE, which
+   rejects a batch whose start position is not strictly greater than the last one
+   stored. The worker therefore asks the context for `pos_max() + 1` instead of
+   assuming the position equals the token count.
+2. **Hybrid memory cannot be trimmed.** Thirteen of LFM3's layers are gated short
+   convolutions with recurrent state that `llama_memory_seq_rm` cannot rewind. An
+   append-only prompt (the common case) needs no trimming; when the prompt does
+   shrink — a turn was dropped, or the conversation changed — the worker clears
+   the cache and evaluates from zero. `Context::trim` reports whether the memory
+   complied, so this is a decision, not a guess.
+
+Image turns are the exception to reuse: `mtmd` owns those embeddings, so a turn
+with images clears the cache and starts fresh.
 
 ## Multimodal
 

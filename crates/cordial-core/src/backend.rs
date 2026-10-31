@@ -334,20 +334,35 @@ fn run_generation(
         } else {
             0
         };
-        if common == 0 {
-            state.context.clear();
-        } else if common < state.cached_tokens.len() {
-            state.context.trim(common as u32);
-        }
-        state.cached_tokens.truncate(common);
-        state.cache_exact = true;
 
-        if common < tokens.len() {
+        // How much of the cache survives. A prompt that simply extends what is
+        // already decoded needs no surgery; a prompt that diverged (an old turn
+        // was trimmed, or the conversation changed) does.
+        let mut start = common;
+        if common < state.cached_tokens.len() {
+            if !state.context.trim(common as u32) {
+                // Hybrid models (LFM3) cannot rewind their recurrent layers.
+                // Starting the sequence again is the only correct option.
+                state.context.clear();
+                start = 0;
+            }
+        }
+        state.cached_tokens.truncate(start);
+
+        // The last token must always be evaluated so there are logits to sample.
+        if start >= tokens.len() {
+            state.context.clear();
+            start = 0;
+            state.cached_tokens.clear();
+        }
+
+        if start < tokens.len() {
             state
                 .context
-                .decode(&tokens[common..], common as i32)
+                .decode(&tokens[start..], start as i32)
                 .map_err(|err| CoreError::Inference(err.to_string()))?;
         }
+        state.cache_exact = true;
         state.cached_tokens = tokens.clone();
     }
 
@@ -366,11 +381,9 @@ fn run_generation(
     let mut text = String::new();
     let mut in_thinking = request.thinking;
     let mut sent_bytes = 0usize;
-    let mut pos = if request.media.is_empty() {
-        tokens.len() as i32
-    } else {
-        state.context.pos_max() + 1
-    };
+    // Ask the context where it is instead of assuming: the memory is the only
+    // authority on the last stored position (and M-RoPE rejects replays).
+    let mut pos = state.context.pos_max() + 1;
     let mut stop = GenStop::MaxTokens;
     let mut output_tokens = 0u32;
 
@@ -397,7 +410,7 @@ fn run_generation(
                 }
                 return Err(CoreError::Inference(err.to_string()));
             }
-            pos += 1;
+            pos = state.context.pos_max() + 1;
             state.cached_tokens.push(token);
             output_tokens += 1;
             continue;
@@ -437,7 +450,7 @@ fn run_generation(
             }
             return Err(CoreError::Inference(err.to_string()));
         }
-        pos += 1;
+        pos = state.context.pos_max() + 1;
         state.cached_tokens.push(token);
 
         // Some LFM3 builds emit the ChatML terminator as text.
