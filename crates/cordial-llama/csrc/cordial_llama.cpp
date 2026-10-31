@@ -261,6 +261,18 @@ int32_t cordial_decode_text(cordial_ctx * ctx, const int32_t * tokens, int32_t n
     batch.n_tokens = n;
 
     const int32_t rc = llama_decode(ctx->ctx, batch);
+    if (rc != 0) {
+        // llama.cpp logs the reason through the log callback; this line makes
+        // the shape of the rejected batch readable next to it.
+        std::fprintf(stderr,
+                     "cordial: decode rejected (rc=%d): n_tokens=%d pos=%d..%d "
+                     "ctx(n_ctx=%u n_batch=%u n_ubatch=%u) n_vocab=%d first=%d last=%d\n",
+                     rc, n, pos0, pos0 + n - 1, llama_n_ctx(ctx->ctx), llama_n_batch(ctx->ctx),
+                     llama_n_ubatch(ctx->ctx), llama_vocab_n_tokens(llama_model_get_vocab(
+                         llama_get_model(ctx->ctx))),
+                     tokens[0], tokens[n - 1]);
+        std::fflush(stderr);
+    }
     llama_batch_free(batch);
     return rc;
 }
