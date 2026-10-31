@@ -128,9 +128,11 @@ jobs:
           find /tmp/llama-build -name "libllama.a" | grep -q .
   live-model:
     name: Behaviour suite (real LFM3-VL-2B)
-    # Same job as .github/workflows/live.yml, reachable from a branch because
-    # GitHub only lists workflows that exist on the default branch.
-    if: github.event_name == 'workflow_dispatch' && inputs.live
+    # Same job as .github/workflows/live.yml. Reachable from a branch two ways:
+    # a manual dispatch with `live: true`, or a commit that asks for it with
+    # `[live]` in the message (GitHub only lists workflows that exist on the
+    # default branch, and dispatch needs actions:write).
+    if: (github.event_name == 'workflow_dispatch' && inputs.live) || contains(github.event.head_commit.message, '[live]')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
