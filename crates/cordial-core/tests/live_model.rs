@@ -88,6 +88,7 @@ impl Live {
             Ok(paths) => paths,
             Err(err) if pinned => {
                 sink_task.abort();
+                eprintln!("MODEL BOOT FAILED: {err}");
                 panic!("CORDIAL_MODEL_DIR is set but the model is unusable: {err}");
             }
             Err(err) => {
@@ -119,6 +120,7 @@ impl Live {
             ),
             Ok(Err(err)) if pinned => {
                 sink_task.abort();
+                eprintln!("MODEL LOAD FAILED: {err}");
                 panic!("CORDIAL_MODEL_DIR is set but the model did not load: {err}");
             }
             Ok(Err(err)) => {

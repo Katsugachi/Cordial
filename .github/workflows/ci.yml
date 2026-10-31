@@ -172,9 +172,11 @@ jobs:
           for log in /tmp/live-load.log /tmp/live.log; do
             [ -f "$log" ] || continue
             echo "==== $log ===="
-            tail -n 40 "$log" | while IFS= read -r line; do
-              printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
-            done
+            grep -E "MODEL BOOT FAILED|MODEL LOAD FAILED|panicked at|assertion|left:|right:|FAILED|test result|Error:|loaded " "$log" \
+              | head -24 \
+              | while IFS= read -r line; do
+                  printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
+                done
           done
           python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
           git config user.name "cordial-live"
