@@ -74,7 +74,11 @@ impl ToolCall {
         let mut out = self.name.clone();
         let mut parts: Vec<String> = Vec::new();
         for arg in self.arguments.iter().take(3) {
-            parts.push(format!("{}={}", arg.name, truncate_chars(&arg.value, 48)));
+            parts.push(format!(
+                "{}={}",
+                arg.name,
+                truncate_chars(arg.value.trim(), 48)
+            ));
         }
         if !parts.is_empty() {
             out.push('(');

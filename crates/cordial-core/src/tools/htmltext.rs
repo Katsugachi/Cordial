@@ -410,7 +410,9 @@ mod tests {
         let text =
             html_to_text(r#"<a href="https://example.com/?a=1&amp;b=2">search &amp; more</a>"#);
         assert!(text.contains("search & more"));
-        assert!(text.contains("https://example.com/?a=1&amp;b=2"));
+        // Entities are decoded once, for the whole document, so the link the
+        // model sees is the plain URL.
+        assert!(text.contains("https://example.com/?a=1&b=2"), "got: {text}");
     }
 
     #[test]
