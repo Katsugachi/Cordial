@@ -10,7 +10,9 @@
 //! model as markup.
 
 /// Elements whose contents are never shown.
-const DROP: [&str; 7] = ["script", "style", "noscript", "svg", "canvas", "template", "iframe"];
+const DROP: [&str; 7] = [
+    "script", "style", "noscript", "svg", "canvas", "template", "iframe",
+];
 
 /// Elements that end a line of text.
 const BLOCK: [&str; 17] = [
@@ -85,7 +87,10 @@ pub fn html_to_text(html: &str) -> String {
         if closing {
             // A closing tag only ends the line.
             if BLOCK.contains(&name.as_str())
-                || matches!(name.as_str(), "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
+                || matches!(
+                    name.as_str(),
+                    "li" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+                )
             {
                 push_break(&mut out);
             }
@@ -351,7 +356,10 @@ mod tests {
     #[test]
     fn renders_links_with_targets() {
         let text = html_to_text(r#"<p>Read <a href="https://example.com/x">the docs</a>.</p>"#);
-        assert!(text.contains("the docs (https://example.com/x)"), "got: {text}");
+        assert!(
+            text.contains("the docs (https://example.com/x)"),
+            "got: {text}"
+        );
     }
 
     #[test]
@@ -368,7 +376,8 @@ mod tests {
 
     #[test]
     fn nested_markup_is_flattened() {
-        let html = "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
+        let html =
+            "<div><section><h1>Title</h1><p>Body <span>text</span> here.</p></section></div>";
         let text = html_to_text(html);
         assert!(text.contains("Title"));
         assert!(text.contains("Body text here."));
@@ -398,7 +407,8 @@ mod tests {
 
     #[test]
     fn entities_survive_in_links() {
-        let text = html_to_text(r#"<a href="https://example.com/?a=1&amp;b=2">search &amp; more</a>"#);
+        let text =
+            html_to_text(r#"<a href="https://example.com/?a=1&amp;b=2">search &amp; more</a>"#);
         assert!(text.contains("search & more"));
         assert!(text.contains("https://example.com/?a=1&amp;b=2"));
     }
