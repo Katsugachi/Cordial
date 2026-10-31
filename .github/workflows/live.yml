@@ -20,7 +20,6 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
       CORDIAL_PORTABLE_CPU: "1"
-      CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -34,6 +33,8 @@ jobs:
           path: ${{ runner.temp }}/cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Run the suite
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
           set -o pipefail
           cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
