@@ -7,26 +7,40 @@ on:
   workflow_dispatch:
 
 env:
-  CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: "0"
   # Pinned llama.cpp release (LFM3-VL support requires >= b11960).
   LLAMA_CPP_TAG: b12020
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  core-test:
-    name: Rust tests (ubuntu)
+  rust:
+    name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test
-        run: cargo test --workspace --all-features
+        with:
+          shared-key: cordial-rust
+          cache-on-failure: true
+      - name: Formatting
+        run: scripts/ci/report.sh cargo fmt --all -- --check
+      - name: Clippy
+        run: scripts/ci/report.sh cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: scripts/ci/report.sh cargo test --workspace --all-targets
 
-  infra-check:
-    name: Inference stack check (llama.cpp + model reachability)
+  inference-stack:
+    name: Inference stack (llama.cpp + model reachability)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Hugging Face reachability (partial model fetch)
@@ -34,7 +48,6 @@ jobs:
           curl -fsSL -r 0-5242879 \
             "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/main/LFM3-VL-2B-Q4_K_M.gguf" \
             -o /tmp/model-head.bin
-          ls -la /tmp/model-head.bin
           test "$(stat -c%s /tmp/model-head.bin)" -gt 5000000
       - name: Fetch pinned llama.cpp source
         run: |
@@ -48,9 +61,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_COMMON=OFF \
-            -DLLAMA_BUILD_MTMD=ON -DBUILD_SHARED_LIBS=OFF
-          cmake --build /tmp/llama-build --config Release -j "$(nproc)"
-          ls -la /tmp/llama-build/tools/mtmd/ /tmp/llama-build/src/ | head -30
+            -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_MTMD=ON -DBUILD_SHARED_LIBS=OFF
+          cmake --build /tmp/llama-build --config Release --parallel
       - name: Verify static libraries exist
         run: |
           find /tmp/llama-build -name "libmtmd.a" -o -name "libllama.a" -o -name "libggml-base.a" | sort

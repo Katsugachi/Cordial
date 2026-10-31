@@ -1,0 +1,375 @@
+//! End-to-end harness tests that need no model weights.
+//!
+//! The scripted backend replays exactly what LFM3 would emit, so these tests
+//! cover the parts that break in practice: tool-call round trips, approvals,
+//! denials, effort budgets, context trimming and cancellation.
+
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+
+use cordial_core::backend::{Backend, ScriptedBackend, ScriptFailure};
+use cordial_core::events::{AgentEvent, EventSink, StopReason};
+use cordial_core::permissions::PermissionPolicy;
+use cordial_core::session::{Attachment, AttachmentKind, Message, Role, Session};
+use cordial_core::settings::{Effort, PermissionMode};
+use cordial_core::tools::ToolRuntime;
+use cordial_core::{Agent, AgentConfig, ApprovalGate, TurnResult};
+
+struct Fixture {
+    workspace: PathBuf,
+    scratch: PathBuf,
+}
+
+impl Fixture {
+    fn new(tag: &str) -> Self {
+        let base = std::env::temp_dir().join(format!(
+            "cordial-test-{tag}-{}-{}",
+            std::process::id(),
+            cordial_core::util::now_ms()
+        ));
+        let workspace = base.join("workspace");
+        let scratch = base.join("scratch");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&scratch).unwrap();
+        std::fs::write(workspace.join("notes.txt"), "The plan is to ship on Friday.").unwrap();
+        std::fs::write(workspace.join("image.png"), [0x89, b'P', b'N', b'G']).unwrap();
+        Self { workspace, scratch }
+    }
+
+    fn runtime(&self, effort: Effort) -> ToolRuntime {
+        ToolRuntime::new(self.workspace.clone(), self.scratch.clone(), effort).unwrap()
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if let Some(root) = self.workspace.parent() {
+            std::fs::remove_dir_all(root).ok();
+        }
+    }
+}
+
+fn config(effort: Effort, mode: PermissionMode) -> AgentConfig {
+    AgentConfig {
+        effort,
+        permission_mode: mode,
+        web_enabled: false, // tests never touch the network
+        thinking: false,
+        max_output_tokens: 256,
+        max_tool_rounds: effort.max_tool_rounds(),
+        max_tool_result_chars: 2_000,
+        keep_image_turns: 2,
+        sampling: cordial_llama::SamplingParams::default(),
+    }
+}
+
+/// Collects events and optionally answers approval requests.
+fn responder(
+    mut receiver: tokio::sync::mpsc::UnboundedReceiver<AgentEvent>,
+    gate: ApprovalGate,
+    allow: bool,
+) -> (Arc<Mutex<Vec<AgentEvent>>>, tokio::task::JoinHandle<()>) {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let log_clone = Arc::clone(&log);
+    let handle = tokio::spawn(async move {
+        while let Some(event) = receiver.recv().await {
+            if let AgentEvent::ToolCallNeedsApproval { call_id, .. } = &event {
+                gate.resolve(call_id, allow).await;
+            }
+            log_clone.lock().unwrap().push(event);
+        }
+    });
+    (log, handle)
+}
+
+async fn run_turn(
+    fixture: &Fixture,
+    script: Vec<&str>,
+    cfg: AgentConfig,
+    session: &mut Session,
+    approvals: Option<(ApprovalGate, bool)>,
+) -> (TurnResult, Vec<AgentEvent>) {
+    let runtime = fixture.runtime(cfg.effort);
+    let mut backend = Backend::Scripted(ScriptedBackend::new(script));
+    let gate = approvals
+        .as_ref()
+        .map(|(gate, _)| gate.clone())
+        .unwrap_or_default();
+    let allow = approvals.as_ref().map(|(_, allow)| *allow).unwrap_or(true);
+    let mut policy = PermissionPolicy::new(cfg.permission_mode);
+    let (sink, receiver) = EventSink::channel();
+    let (log, handle) = responder(receiver, gate.clone(), allow);
+
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: cfg,
+    };
+    let result = agent
+        .run(session, "What is in my notes?".to_string(), Vec::new())
+        .await
+        .expect("turn should not fail");
+    drop(agent);
+    drop(sink);
+    handle.abort();
+    let events = log.lock().unwrap().clone();
+    (result, events)
+}
+
+#[tokio::test]
+async fn plain_answer_is_persisted_and_streamed() {
+    let fixture = Fixture::new("plain");
+    let mut session = Session::new();
+    let (result, events) = run_turn(
+        &fixture,
+        vec!["The notes say the plan is to ship on Friday."],
+        config(Effort::Medium, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
+
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(result.rounds, 1);
+    assert_eq!(session.messages.len(), 2);
+    assert_eq!(session.messages[1].role, Role::Assistant);
+    assert!(session.messages[1].content.contains("Friday"));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::TextDelta { .. })));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::TurnFinished { stop: StopReason::Answered, .. })));
+}
+
+#[tokio::test]
+async fn tool_call_runs_and_feeds_back_into_the_model() {
+    let fixture = Fixture::new("tool");
+    let mut session = Session::new();
+    let script = vec![
+        "Reading the notes.\n</think>\n<tool_call>\n<function=read_file>\n<parameter=path>\nnotes.txt\n</parameter>\n</function>\n</tool_call>",
+        "It says you plan to ship on Friday.",
+    ];
+    let (result, events) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Medium, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
+
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(result.rounds, 2);
+    // user, assistant(tool call), tool result, assistant(answer)
+    assert_eq!(session.messages.len(), 4);
+    assert_eq!(session.messages[2].role, Role::Tool);
+    assert!(session.messages[2].content.contains("ship on Friday"));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ToolCallFinished { ok: true, .. })));
+}
+
+#[tokio::test]
+async fn manual_mode_waits_for_approval() {
+    let fixture = Fixture::new("manual");
+    let mut session = Session::new();
+    let script = vec![
+        "<tool_call>\n<function=read_file>\n<parameter=path>\nnotes.txt\n</parameter>\n</function>\n</tool_call>",
+        "Approved, so here is the answer.",
+    ];
+    let gate = ApprovalGate::new();
+    let (result, events) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Medium, PermissionMode::Manual),
+        &mut session,
+        Some((gate, true)),
+    )
+    .await;
+
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ToolCallNeedsApproval { .. })));
+    assert!(session.messages.iter().any(|m| m.role == Role::Tool));
+}
+
+#[tokio::test]
+async fn denial_is_reported_to_the_model() {
+    let fixture = Fixture::new("deny");
+    let mut session = Session::new();
+    let script = vec![
+        "<tool_call>\n<function=read_file>\n<parameter=path>\nnotes.txt\n</parameter>\n</function>\n</tool_call>",
+        "I could not read the file, so I cannot say.",
+    ];
+    let gate = ApprovalGate::new();
+    let (result, events) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Medium, PermissionMode::Manual),
+        &mut session,
+        Some((gate, false)),
+    )
+    .await;
+
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ToolCallDenied { .. })));
+    let tool_message = session
+        .messages
+        .iter()
+        .find(|m| m.role == Role::Tool)
+        .expect("denial recorded as a tool message");
+    assert!(tool_message.content.contains("declined"));
+}
+
+#[tokio::test]
+async fn writes_need_approval_even_in_auto_mode() {
+    let fixture = Fixture::new("write");
+    let mut session = Session::new();
+    let script = vec![
+        "<tool_call>\n<function=write_file>\n<parameter=path>\nplan.md\n<parameter=content>\nShip Friday.\n</parameter>\n</function>\n</tool_call>",
+        "Written.",
+    ];
+    let gate = ApprovalGate::new();
+    let (_, events) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Medium, PermissionMode::Auto),
+        &mut session,
+        Some((gate, true)),
+    )
+    .await;
+
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ToolCallNeedsApproval { .. })));
+    assert!(fixture.workspace.join("plan.md").exists());
+}
+
+#[tokio::test]
+async fn tool_budget_triggers_a_final_answer() {
+    let fixture = Fixture::new("budget");
+    let mut session = Session::new();
+    let mut cfg = config(Effort::Low, PermissionMode::Auto);
+    cfg.max_tool_rounds = 1;
+    let script = vec![
+        "<tool_call>\n<function=read_file>\n<parameter=path>\nnotes.txt\n</parameter>\n</function>\n</tool_call>",
+        "Summarising with what I have: Friday.",
+    ];
+    let (result, _) = run_turn(&fixture, script, cfg, &mut session, None).await;
+
+    assert_eq!(result.stop, StopReason::ToolBudget);
+    let last = session.messages.last().unwrap();
+    assert_eq!(last.role, Role::Assistant);
+    assert!(last.content.contains("Friday"));
+}
+
+#[tokio::test]
+async fn context_overflow_trims_old_turns_and_retries() {
+    let fixture = Fixture::new("overflow");
+    let mut session = Session::new();
+    // Two completed turns so there is something to trim.
+    session.push(Message::user("first question", vec![]));
+    session.push(Message::assistant("first answer", None, vec![]));
+
+    let runtime = fixture.runtime(Effort::Medium);
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["Recovered answer."]));
+    if let Backend::Scripted(scripted) = &mut backend {
+        scripted.fail_once(ScriptFailure::Overflow);
+    }
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Medium, PermissionMode::Auto),
+    };
+    let result = agent
+        .run(&mut session, "second question".to_string(), Vec::new())
+        .await
+        .unwrap();
+
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(session.messages.len(), 2, "old turn should be trimmed away");
+    assert_eq!(session.messages[0].content, "second question");
+    assert_eq!(session.messages[1].content, "Recovered answer.");
+}
+
+#[tokio::test]
+async fn cancellation_stops_before_generating() {
+    let fixture = Fixture::new("cancel");
+    let mut session = Session::new();
+    let runtime = fixture.runtime(Effort::Medium);
+    let cancel = Arc::new(AtomicBool::new(true));
+    let mut backend = Backend::Scripted(
+        ScriptedBackend::new(vec!["should never be used"]).with_cancel(Arc::clone(&cancel)),
+    );
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Medium, PermissionMode::Auto),
+    };
+    let result = agent
+        .run(&mut session, "stop me".to_string(), Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(result.stop, StopReason::Cancelled);
+    assert_eq!(result.rounds, 0);
+}
+
+#[tokio::test]
+async fn text_attachments_are_read_into_the_prompt() {
+    let fixture = Fixture::new("attach");
+    let mut session = Session::new();
+    let runtime = fixture.runtime(Effort::Medium);
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["Got it."]));
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Medium, PermissionMode::Auto),
+    };
+    let attachment = Attachment {
+        kind: AttachmentKind::Text,
+        name: "notes.txt".into(),
+        path: fixture.workspace.join("notes.txt").display().to_string(),
+    };
+    agent
+        .run(&mut session, "Read this".to_string(), vec![attachment])
+        .await
+        .unwrap();
+    drop(agent);
+
+    let user_message = &session.messages[0];
+    assert!(user_message.content.contains("Attached file `notes.txt`"));
+    assert!(user_message.content.contains("ship on Friday"));
+
+    // The rendered prompt must include the file body and no media markers.
+    if let Backend::Scripted(scripted) = &backend {
+        let request = scripted.requests.first().expect("one request");
+        assert!(request.prompt.contains("ship on Friday"));
+        assert!(!request.prompt.contains("<__media__>"));
+    }
+}

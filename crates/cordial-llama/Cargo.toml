@@ -1,0 +1,28 @@
+[package]
+name = "cordial-llama"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Pinned llama.cpp + libmtmd bindings used by Cordial (static build, small C++ shim)."
+build = "build.rs"
+links = "cordial_llama"
+
+[features]
+default = []
+# Force a GPU backend. Metal is automatic on Apple targets; OpenCL is
+# automatic on Windows ARM64 (see build.rs).
+vulkan = []
+cuda = []
+opencl = []
+
+[dependencies]
+tracing = { workspace = true }
+
+[build-dependencies]
+cc = "1"
+flate2 = "1"
+tar = "0.4"
+ureq = { version = "2", default-features = false, features = ["tls", "gzip"] }
+sha2 = "0.10"

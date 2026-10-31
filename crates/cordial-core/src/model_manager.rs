@@ -1,0 +1,350 @@
+//! First-run model download and integrity checks.
+//!
+//! Cordial ships without weights and fetches Liquid AI's GGUF build the first
+//! time the window opens. Downloads resume, verify against the checksum the CDN
+//! advertises, and stream progress so the UI can show a real progress rail.
+
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use futures_util::StreamExt;
+use reqwest::Client;
+use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
+
+use crate::error::CoreError;
+use crate::events::{AgentEvent, EventSink};
+
+/// Where the default weights live on the Hub.
+pub const HF_REPO: &str = "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/main";
+
+/// Default quantisation: Q4_K_M balances quality, size and speed on laptop CPUs.
+pub const DEFAULT_WEIGHTS: &str = "LFM3-VL-2B-Q4_K_M.gguf";
+/// Vision projector paired with the Q4_K_M weights.
+pub const DEFAULT_PROJECTOR: &str = "mmproj-LFM3-VL-2B-Q8_0.gguf";
+
+const WEIGHTS_BYTES: u64 = 1_100_000_000;
+const PROJECTOR_BYTES: u64 = 203_000_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelKind {
+    Weights,
+    Projector,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelFile {
+    pub name: &'static str,
+    pub url: String,
+    pub approx_bytes: u64,
+    pub kind: ModelKind,
+}
+
+/// The files Cordial downloads on first run.
+pub fn default_files() -> Vec<ModelFile> {
+    vec![
+        ModelFile {
+            name: DEFAULT_WEIGHTS,
+            url: format!("{HF_REPO}/{DEFAULT_WEIGHTS}"),
+            approx_bytes: WEIGHTS_BYTES,
+            kind: ModelKind::Weights,
+        },
+        ModelFile {
+            name: DEFAULT_PROJECTOR,
+            url: format!("{HF_REPO}/{DEFAULT_PROJECTOR}"),
+            approx_bytes: PROJECTOR_BYTES,
+            kind: ModelKind::Projector,
+        },
+    ]
+}
+
+/// Resolved on-disk locations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPaths {
+    pub weights: PathBuf,
+    pub projector: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModelStatus {
+    Ready(ModelPaths),
+    /// Nothing usable yet; `missing_bytes` is the estimated download size.
+    Missing { missing_bytes: u64 },
+    /// Weights are present but the projector is not, so images are unavailable.
+    TextOnly(ModelPaths),
+}
+
+impl ModelStatus {
+    pub fn is_ready(&self) -> bool {
+        matches!(self, ModelStatus::Ready(_))
+    }
+}
+
+pub struct ModelManager {
+    dir: PathBuf,
+    client: Client,
+}
+
+impl ModelManager {
+    pub fn new(dir: impl Into<PathBuf>) -> Result<Self, CoreError> {
+        let client = Client::builder()
+            .user_agent("Cordial/0.1 (+https://github.com/Katsugachi/Cordial)")
+            .timeout(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|err| CoreError::Network(err.to_string()))?;
+        Ok(Self {
+            dir: dir.into(),
+            client,
+        })
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    pub fn weights_path(&self) -> PathBuf {
+        self.dir.join(DEFAULT_WEIGHTS)
+    }
+
+    pub fn projector_path(&self) -> PathBuf {
+        self.dir.join(DEFAULT_PROJECTOR)
+    }
+
+    /// What is on disk right now.
+    pub fn status(&self) -> ModelStatus {
+        let weights = self.weights_path();
+        let projector = self.projector_path();
+        let weights_ok = is_complete(&weights);
+        let projector_ok = is_complete(&projector);
+        match (weights_ok, projector_ok) {
+            (true, true) => ModelStatus::Ready(ModelPaths {
+                weights,
+                projector: Some(projector),
+            }),
+            (true, false) => ModelStatus::TextOnly(ModelPaths {
+                weights,
+                projector: None,
+            }),
+            _ => ModelStatus::Missing {
+                missing_bytes: WEIGHTS_BYTES + PROJECTOR_BYTES,
+            },
+        }
+    }
+
+    /// Downloads anything missing. Returns the paths that are now usable.
+    pub async fn ensure_defaults(&self, events: &EventSink) -> Result<ModelPaths, CoreError> {
+        tokio::fs::create_dir_all(&self.dir).await?;
+        let files = default_files();
+
+        let mut weights: Option<PathBuf> = None;
+        let mut projector: Option<PathBuf> = None;
+
+        for file in &files {
+            let target = self.dir.join(file.name);
+            if is_complete(&target) {
+                match file.kind {
+                    ModelKind::Weights => weights = Some(target),
+                    ModelKind::Projector => projector = Some(target),
+                }
+                continue;
+            }
+            match self.download(file, events).await {
+                Ok(path) => match file.kind {
+                    ModelKind::Weights => weights = Some(path),
+                    ModelKind::Projector => projector = Some(path),
+                },
+                Err(err) => {
+                    events.emit(AgentEvent::DownloadFailed {
+                        file: file.name.to_string(),
+                        message: err.to_string(),
+                    });
+                    if file.kind == ModelKind::Weights {
+                        return Err(err);
+                    }
+                    // A missing projector only costs image understanding.
+                    events.emit(AgentEvent::Notice {
+                        message: "Vision projector could not be downloaded; images are disabled."
+                            .to_string(),
+                    });
+                }
+            }
+        }
+
+        let weights = weights.ok_or_else(|| {
+            CoreError::ModelNotReady("the model file is missing".to_string())
+        })?;
+        Ok(ModelPaths {
+            weights,
+            projector: projector.filter(|path| is_complete(path)),
+        })
+    }
+
+    async fn download(&self, file: &ModelFile, events: &EventSink) -> Result<PathBuf, CoreError> {
+        let target = self.dir.join(file.name);
+        let partial = self.dir.join(format!("{}.part", file.name));
+
+        let mut received = match tokio::fs::metadata(&partial).await {
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        };
+
+        let mut request = self.client.get(&file.url);
+        if received > 0 {
+            request = request.header(reqwest::header::RANGE, format!("bytes={received}-"));
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|err| CoreError::Network(err.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(CoreError::Network(format!(
+                "{} returned HTTP {}",
+                file.url,
+                response.status()
+            )));
+        }
+
+        let expected_sha = response
+            .headers()
+            .get("x-linked-etag")
+            .or_else(|| response.headers().get(reqwest::header::ETAG))
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.trim_matches('"').to_ascii_lowercase())
+            .filter(|value| value.len() == 64);
+
+        let append = received > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
+        if !append {
+            received = 0;
+        }
+        let total = response
+            .content_length()
+            .map(|length| received + length)
+            .or(Some(file.approx_bytes).filter(|_| !append));
+
+        let mut handle = if append {
+            tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(&partial)
+                .await?
+        } else {
+            tokio::fs::File::create(&partial).await?
+        };
+
+        // Hash from the start so resumed files still verify.
+        let mut hasher = Sha256::new();
+        if received > 0 {
+            let existing = tokio::fs::read(&partial).await?;
+            hasher.update(&existing);
+        }
+
+        let mut stream = response.bytes_stream();
+        let mut last_emit = Instant::now();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|err| CoreError::Network(err.to_string()))?;
+            handle.write_all(&chunk).await?;
+            hasher.update(&chunk);
+            received += chunk.len() as u64;
+            if last_emit.elapsed() >= Duration::from_millis(200) {
+                last_emit = Instant::now();
+                events.emit(AgentEvent::DownloadProgress {
+                    file: file.name.to_string(),
+                    received,
+                    total,
+                });
+            }
+        }
+        handle.flush().await?;
+        handle.sync_all().await?;
+        drop(handle);
+
+        if let Some(expected) = expected_sha {
+            let digest: String = hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            if digest != expected {
+                let _ = tokio::fs::remove_file(&partial).await;
+                return Err(CoreError::Network(format!(
+                    "checksum mismatch for {} (the download was corrupted, try again)",
+                    file.name
+                )));
+            }
+        }
+
+        tokio::fs::rename(&partial, &target).await?;
+        events.emit(AgentEvent::DownloadFinished {
+            file: file.name.to_string(),
+            path: target.display().to_string(),
+        });
+        Ok(target)
+    }
+
+    /// Removes downloaded weights so the next launch starts clean.
+    pub async fn remove_defaults(&self) -> Result<(), CoreError> {
+        for file in default_files() {
+            let path = self.dir.join(file.name);
+            if path.exists() {
+                tokio::fs::remove_file(path).await?;
+            }
+            let partial = self.dir.join(format!("{}.part", file.name));
+            if partial.exists() {
+                tokio::fs::remove_file(partial).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A file counts as present when it exists and is bigger than a few MB, which
+/// rules out interrupted writes that never reached the rename.
+fn is_complete(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|meta| meta.len() > 1_000_000)
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_files_point_at_the_hub() {
+        let files = default_files();
+        assert_eq!(files.len(), 2);
+        assert!(files[0].url.starts_with("https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF"));
+        assert!(files[0].url.ends_with(DEFAULT_WEIGHTS));
+        assert_eq!(files[1].kind, ModelKind::Projector);
+    }
+
+    #[test]
+    fn missing_status_reports_expected_size() {
+        let dir = std::env::temp_dir().join(format!("cordial-mm-{}", crate::util::now_ms()));
+        let manager = ModelManager::new(&dir).unwrap();
+        match manager.status() {
+            ModelStatus::Missing { missing_bytes } => {
+                assert!(missing_bytes > 1_000_000_000);
+            }
+            other => panic!("unexpected status: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn complete_files_are_detected() {
+        let dir = std::env::temp_dir().join(format!("cordial-mm2-{}", crate::util::now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manager = ModelManager::new(&dir).unwrap();
+        std::fs::write(manager.weights_path(), vec![0u8; 1_200_000]).unwrap();
+        match manager.status() {
+            ModelStatus::TextOnly(paths) => {
+                assert!(paths.projector.is_none());
+            }
+            other => panic!("unexpected status: {other:?}"),
+        }
+        std::fs::write(manager.projector_path(), vec![0u8; 1_200_000]).unwrap();
+        assert!(manager.status().is_ready());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
