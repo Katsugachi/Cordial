@@ -186,11 +186,6 @@ impl Session {
         self.messages.push(message);
     }
 
-    /// Index of the most recent user message.
-    pub fn last_user_index(&self) -> Option<usize> {
-        self.messages.iter().rposition(|m| m.role == Role::User)
-    }
-
     /// Titles a fresh conversation from its first user message.
     pub fn retitle(&mut self, text: &str) {
         if self.title != "New chat" {
@@ -328,7 +323,7 @@ mod tests {
     #[test]
     fn long_titles_are_truncated() {
         let mut session = Session::new();
-        session.retitle("x".repeat(200));
+        session.retitle(&"x".repeat(200));
         assert!(session.title.chars().count() <= 55);
         assert!(session.title.ends_with('…'));
     }

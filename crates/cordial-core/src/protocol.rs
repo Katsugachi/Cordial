@@ -188,7 +188,6 @@ fn parse_block(block: &str) -> Result<ParsedCall, String> {
             arguments.push(ToolArgument { name: key, value });
         }
         if remainder.is_empty() {
-            rest = "";
             break;
         }
         rest = remainder;

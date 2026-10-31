@@ -86,7 +86,7 @@ pub fn list(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         names.len()
     );
     for (name, is_dir, size) in names.iter().take(MAX_DIR_ENTRIES) {
-        if is_dir {
+        if *is_dir {
             text.push_str(&format!("{name}/\n"));
         } else {
             text.push_str(&format!("{name}  {}\n", human_bytes(*size)));
