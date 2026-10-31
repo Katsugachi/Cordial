@@ -299,7 +299,7 @@ svg {
 .model-chip__dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 1px;
   background: var(--ink);
   flex: 0 0 auto;
 }
@@ -612,6 +612,11 @@ svg {
   border: 1px solid var(--rule-strong);
 }
 
+.tool-card summary:hover {
+  background: var(--hover-on-accent);
+  border-radius: var(--radius-chip);
+}
+
 .tool-card__head {
   display: flex;
   align-items: center;
@@ -674,7 +679,7 @@ svg {
   overflow: auto;
   padding: 10px;
   border-radius: var(--radius-chip);
-  background: rgb(255 255 255 / 55%);
+  background: var(--note);
   font-family: "Martian Mono", Consolas, monospace;
   font-size: 11px;
   line-height: 1.5;

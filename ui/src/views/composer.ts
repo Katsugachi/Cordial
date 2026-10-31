@@ -17,9 +17,13 @@ export function composerHtml(state: AppState, attachments: Attachment[]): string
     .join("");
 
   const busy = state.busy;
+  // Exactly one dominant action per screen: while an approval is waiting, that
+  // action is Allow, so Send steps back to an outline button.
   const sendButton = busy
     ? `<button class="icon-button" data-action="stop" aria-label="Stop answering" title="Stop">${icons.stop(18)}</button>`
-    : `<button class="primary-button" data-action="send" aria-label="Send message">${icons.send(16)} Send</button>`;
+    : state.approval
+      ? `<button class="outline-button" data-action="send" aria-label="Send message">${icons.send(16)} Send</button>`
+      : `<button class="primary-button" data-action="send" aria-label="Send message">${icons.send(16)} Send</button>`;
 
   return `<section class="composer">
     <div class="composer__inner">
