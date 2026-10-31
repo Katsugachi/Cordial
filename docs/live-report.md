@@ -5,7 +5,7 @@ the same prompts the harness sends in the app, answered by the real
 LFM3-VL-2B Q4_K_M weights on CPU. Regenerate with `make live`.
 
 - Date: 2026-10-31
-- Build: [41226014673](https://github.com/Katsugachi/Cordial/actions/runs/41226014673)
+- Build: [41227736149](https://github.com/Katsugachi/Cordial/actions/runs/41227736149)
 
 - Assertions: 0 passed, 0 failed
 
