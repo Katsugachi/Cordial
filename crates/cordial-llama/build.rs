@@ -149,7 +149,7 @@ fn download_verified(url: &str, dest: &Path, sha256: Option<&str>) {
 
     println!("cargo:warning=downloading {url}");
     let tmp = dest.with_extension("part");
-    let mut resp = ureq::get(url)
+    let resp = ureq::get(url)
         .timeout(Duration::from_secs(900))
         .call()
         .unwrap_or_else(|e| panic!("failed to download {url}: {e}"));

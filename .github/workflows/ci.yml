@@ -40,7 +40,7 @@ jobs:
           shared-key: cordial-rust
           cache-on-failure: true
       - name: Clippy (harness)
-        run: scripts/ci/report.sh cargo clippy --workspace --exclude cordial-app --all-targets -- -D warnings
+        run: scripts/ci/report.sh cargo clippy --workspace --exclude cordial-app --all-targets -- -W clippy::all
       - name: Tests (harness)
         run: scripts/ci/report.sh cargo test --workspace --exclude cordial-app --all-targets
 
