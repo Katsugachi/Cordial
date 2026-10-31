@@ -150,8 +150,14 @@ jobs:
         with:
           path: ${{ runner.temp }}/cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
-      - name: Run the prompt suite
-        # Absolute path: a "~" in an env value would reach Rust unexpanded.
+      - name: Load check (one question)
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact answers_a_plain_factual_question_briefly 2>&1 | tee /tmp/live-load.log
+      - name: Full suite
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
@@ -161,6 +167,15 @@ jobs:
       - name: Publish the transcript
         if: always()
         run: |
+          # Job logs are not always downloadable, so the interesting part of the
+          # run is republished as annotations and committed as a transcript.
+          for log in /tmp/live-load.log /tmp/live.log; do
+            [ -f "$log" ] || continue
+            echo "==== $log ===="
+            tail -n 40 "$log" | while IFS= read -r line; do
+              printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
+            done
+          done
           python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
           git config user.name "cordial-live"
           git config user.email "actions@users.noreply.github.com"
