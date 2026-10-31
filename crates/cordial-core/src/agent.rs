@@ -341,6 +341,10 @@ impl<'a> Agent<'a> {
         let preview = call.preview();
 
         if let Permission::Ask { .. } = self.policy.evaluate(call) {
+            // Register the wait *before* announcing the request. Otherwise a
+            // fast UI could answer a request the harness is not yet waiting on,
+            // and the turn would stall until the approval timeout.
+            let receiver = self.approvals.register(&call.id).await;
             self.events.emit(AgentEvent::ToolCallNeedsApproval {
                 turn_id: turn_id.to_string(),
                 call_id: call.id.clone(),
@@ -348,7 +352,6 @@ impl<'a> Agent<'a> {
                 preview: preview.clone(),
                 risk: risk_label.clone(),
             });
-            let receiver = self.approvals.register(&call.id).await;
             let allowed = match tokio::time::timeout(APPROVAL_TIMEOUT, receiver).await {
                 Ok(Ok(decision)) => decision,
                 _ => false,

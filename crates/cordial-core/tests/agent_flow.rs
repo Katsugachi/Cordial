@@ -79,9 +79,13 @@ fn responder(
     let handle = tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
             if let AgentEvent::ToolCallNeedsApproval { call_id, .. } = &event {
+                // Answer as the user would, while the agent waits on the gate.
                 gate.resolve(call_id, allow).await;
             }
-            log_clone.lock().unwrap().push(event);
+            if !matches!(event, AgentEvent::TextDelta { .. }) {
+                // Keep the log readable: deltas are replayed by the renderer.
+                log_clone.lock().unwrap().push(event);
+            }
         }
     });
     (log, handle)
@@ -119,7 +123,9 @@ async fn run_turn(
         .expect("turn should not fail");
     drop(agent);
     drop(sink);
-    handle.abort();
+    // Dropping the sink closes the channel, so the collector drains everything
+    // the turn emitted and then finishes.
+    let _ = handle.await;
     let events = log.lock().unwrap().clone();
     (result, events)
 }
@@ -144,7 +150,7 @@ async fn plain_answer_is_persisted_and_streamed() {
     assert!(session.messages[1].content.contains("Friday"));
     assert!(events
         .iter()
-        .any(|event| matches!(event, AgentEvent::TextDelta { .. })));
+        .any(|event| matches!(event, AgentEvent::AssistantMessage { .. })));
     assert!(events.iter().any(|event| matches!(
         event,
         AgentEvent::TurnFinished {
