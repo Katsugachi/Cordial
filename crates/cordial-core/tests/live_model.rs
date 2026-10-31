@@ -174,16 +174,18 @@ impl Live {
             let mut diagnostics: Vec<String> = Vec::new();
             while let Some(event) = receiver.recv().await {
                 match event {
-                    cordial_core::AgentEvent::TextDelta { text: delta, .. } => text.push_str(&delta),
+                    cordial_core::AgentEvent::TextDelta { text: delta, .. } => {
+                        text.push_str(&delta)
+                    }
                     cordial_core::AgentEvent::Error { message, .. } => {
                         diagnostics.push(format!("error: {message}"))
                     }
                     cordial_core::AgentEvent::Notice { message } => {
                         diagnostics.push(format!("notice: {message}"))
                     }
-                    cordial_core::AgentEvent::ToolCallFinished { name, summary, ok, .. } => {
-                        diagnostics.push(format!("tool {name} ok={ok}: {summary}"))
-                    }
+                    cordial_core::AgentEvent::ToolCallFinished {
+                        name, summary, ok, ..
+                    } => diagnostics.push(format!("tool {name} ok={ok}: {summary}")),
                     _ => {}
                 }
             }
