@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/cordial-app",
     "crates/cordial-core",
     "crates/cordial-llama",
 ]
