@@ -3,14 +3,15 @@
 # Cordial
 
 A private agent that runs on your machine. It answers questions, checks facts on
-the web, drives a browser, reads your files, and looks at images — all powered by
+the web, drives a browser, reads your files, and looks at images, powered by
 [LFM3-VL-2B](https://huggingface.co/LiquidAI/LFM3-VL-2B) through
 [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
 Cordial is a desktop app: a thin Rust/Tauri shell around a local agentic harness.
 On first launch it downloads the Q4_K_M weights (1.1 GB) plus the vision
 projector (203 MB), and from then on the network is used only when the agent
-searches or browses for you.
+searches or browses for you. 
+The X post from liquid AI said it was almost as capable as GPT 5.6 Luna and i guess if it's stable enough to be in Cordial that's good.
 
 ![Cordial](assets/brand/icon-preview.png)
 
