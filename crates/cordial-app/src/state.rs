@@ -116,10 +116,7 @@ impl Core {
         })??;
         self.engine = Some(Engine {
             backend,
-            paths: ModelPaths {
-                weights,
-                projector,
-            },
+            paths: ModelPaths { weights, projector },
             info,
         });
         Ok(())
@@ -296,8 +293,12 @@ impl AppState {
             let workspace = workspace_for(&guard.paths, &settings);
             std::fs::create_dir_all(&workspace).map_err(|err| err.to_string())?;
             guard.tools = Arc::new(
-                ToolRuntime::new(workspace, guard.paths.root().join("scratch"), settings.effort)
-                    .map_err(|err| err.to_string())?,
+                ToolRuntime::new(
+                    workspace,
+                    guard.paths.root().join("scratch"),
+                    settings.effort,
+                )
+                .map_err(|err| err.to_string())?,
             );
         }
 
@@ -321,7 +322,11 @@ impl AppState {
     pub async fn summary(&self) -> (Settings, ModelSummary, String) {
         let guard = self.core.lock().await;
         let workspace = workspace_for(&guard.paths, &guard.settings);
-        (guard.settings.clone(), model_summary(&guard), workspace.display().to_string())
+        (
+            guard.settings.clone(),
+            model_summary(&guard),
+            workspace.display().to_string(),
+        )
     }
 }
 
