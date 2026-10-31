@@ -233,7 +233,7 @@ impl Model {
         parse_special: bool,
     ) -> Result<Vec<i32>, LlamaError> {
         let c_text = CString::new(text)?;
-        let mut guess = text.len().saturating_add(16) as usize;
+        let mut guess = text.len().saturating_add(16);
         loop {
             let mut out = vec![0i32; guess];
             // SAFETY: valid text, writable buffer of `guess` entries.

@@ -265,10 +265,6 @@ int32_t cordial_decode_text(cordial_ctx * ctx, const int32_t * tokens, int32_t n
     return rc;
 }
 
-float * cordial_logits(const cordial_ctx * ctx) {
-    return ctx != nullptr ? llama_get_logits(const_cast<llama_context *>(ctx->ctx)) : nullptr;
-}
-
 // --------------------------------------------------------------- sampling
 
 cordial_sampler * cordial_sampler_new(int32_t n_vocab, float temp, int32_t top_k, float top_p,

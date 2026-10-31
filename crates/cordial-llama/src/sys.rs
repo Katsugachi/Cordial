@@ -4,7 +4,7 @@
 
 #![allow(non_camel_case_types)]
 
-use std::os::raw::{c_char, c_float, c_int, c_void};
+use std::os::raw::{c_char, c_int, c_void};
 
 #[repr(C)]
 pub struct CordialModel {
@@ -96,7 +96,6 @@ extern "C" {
         pos0: i32,
         logits_last_only: i32,
     ) -> i32;
-    pub fn cordial_logits(ctx: *const CordialCtx) -> *mut c_float;
 
     pub fn cordial_sampler_new(
         n_vocab: i32,

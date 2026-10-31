@@ -75,7 +75,6 @@ const char * cordial_token_text(const cordial_model * m, int32_t token);
 // Decodes `tokens` starting at position `pos0`. Returns 0 on success.
 int32_t cordial_decode_text(cordial_ctx * ctx, const int32_t * tokens, int32_t n,
                             int32_t pos0, int32_t logits_last_only);
-float * cordial_logits(const cordial_ctx * ctx);
 
 // --------------------------------------------------------------- sampling
 

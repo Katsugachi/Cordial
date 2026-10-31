@@ -270,7 +270,7 @@ impl ToolRuntime {
             "browser_open" => self.browser_open(call).await,
             "browser_click" => self.browser_click(call).await,
             "browser_type" => self.browser_type(call).await,
-            "browser_view" => self.browser_view().await,
+            "browser_view" => self.browser_view(call).await,
             "read_file" => files::read(self, call),
             "list_files" => files::list(self, call),
             "write_file" => files::write(self, call),
@@ -367,7 +367,7 @@ impl ToolRuntime {
         }
     }
 
-    async fn browser_view(&self) -> ToolOutcome {
+    async fn browser_view(&self, call: &ToolCall) -> ToolOutcome {
         let mut guard = self.browser.lock().await;
         let Some(session) = guard.as_mut() else {
             return ToolOutcome::fail(
