@@ -5,8 +5,7 @@
 A private agent that runs on your machine. It answers questions, checks facts on
 the web, drives a browser, reads your files, and looks at images — all powered by
 [LFM3-VL-2B](https://huggingface.co/LiquidAI/LFM3-VL-2B) through
-[llama.cpp](https://github.com/ggml-org/llama.cpp), with no account and no cloud
-round trip.
+[llama.cpp](https://github.com/ggml-org/llama.cpp)
 
 Cordial is a desktop app: a thin Rust/Tauri shell around a local agentic harness.
 On first launch it downloads the Q4_K_M weights (1.1 GB) plus the vision
@@ -34,34 +33,6 @@ searches or browses for you.
 - **Runs offline.** No telemetry, no analytics, no accounts. Nothing leaves the
   machine unless a web tool is called.
 
-## How it is built
-
-```
-crates/
-  cordial-llama/   llama.cpp + libmtmd, built from a pinned source tarball,
-                   behind a ~40 function C shim so Rust never sees a llama.cpp struct
-  cordial-core/    the harness: prompt assembly, tool loop, permissions,
-                   sessions, model manager, inference worker
-  cordial-app/     Tauri desktop shell (commands, window, events)
-ui/                the window: TypeScript, no framework, Tuck design system
-```
-
-Three ideas shape the code:
-
-1. **The prompt is a pure function.** `cordial-core/src/prompt.rs` renders LFM3's
-   ChatML exactly as the checkpoint's own `chat_template.jinja` does — tool
-   schemas inside the system turn, reasoning kept only for the current turn,
-   `<tool_response>` wrapping. It is unit tested against the template's golden
-   strings, so prompt work never needs a GPU or a download.
-2. **Inference is a worker.** llama.cpp contexts are not `Sync` and must not block
-   the UI thread, so `cordial-core/src/backend.rs` owns a dedicated inference
-   thread with a channel protocol. The KV cache is reused across turns with a
-   token-level common-prefix trim, which is what makes a second question in a
-   conversation cheap.
-3. **The UI is event-driven.** The harness emits `AgentEvent`s; the window folds
-   them into view state with a pure reducer (`ui/src/store.ts`) that is tested
-   without a webview. The same bridge interface powers a demo mode, so the
-   interface can be reviewed in a browser.
 
 ## Install
 
@@ -148,12 +119,6 @@ Each live run publishes what the model actually said to
 [`docs/live-report.md`](docs/live-report.md), so prompt quality can be reviewed
 without a local GPU or a 1.3 GB download.
 
-## Privacy
-
-Nothing is sent anywhere except search and page requests the agent makes on your
-behalf. Settings, chats and the workspace live in the app-data folder. There is
-no telemetry, no crash reporting and no remote logging. See
-[`docs/SECURITY.md`](docs/SECURITY.md) for the threat model.
 
 ## Licences
 
