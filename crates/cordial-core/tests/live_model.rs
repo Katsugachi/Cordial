@@ -90,7 +90,10 @@ impl Live {
             &paths.weights,
             paths.projector.as_deref(),
             8_192,
-            (std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4) as i32) - 1,
+            (std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4) as i32)
+                - 1,
             SamplingParams::default(),
         );
         let cancel = Arc::new(AtomicBool::new(false));
@@ -122,8 +125,12 @@ impl Live {
         )
         .unwrap();
         let scratch = tempdir::TempDir::new("cordial-live-scratch");
-        let runtime = ToolRuntime::new(workspace.path().to_path_buf(), scratch.path().to_path_buf(), Effort::Medium)
-            .ok()?;
+        let runtime = ToolRuntime::new(
+            workspace.path().to_path_buf(),
+            scratch.path().to_path_buf(),
+            Effort::Medium,
+        )
+        .ok()?;
 
         Some(Self {
             backend: Backend::Llama(backend),
@@ -181,7 +188,9 @@ impl Live {
         drop(agent);
         drop(sink);
         let streamed = drain.await.unwrap_or_default();
-        let stop = result.map(|r| format!("{:?}", r.stop)).unwrap_or_else(|e| format!("error: {e}"));
+        let stop = result
+            .map(|r| format!("{:?}", r.stop))
+            .unwrap_or_else(|e| format!("error: {e}"));
 
         let answer = session
             .messages
@@ -191,7 +200,10 @@ impl Live {
             .map(|message| message.content.clone())
             .unwrap_or_default();
 
-        eprintln!("\n--- {text}\n({stop}, {} words)\n{answer}\n---\n", answer.split_whitespace().count());
+        eprintln!(
+            "\n--- {text}\n({stop}, {} words)\n{answer}\n---\n",
+            answer.split_whitespace().count()
+        );
         if answer.is_empty() {
             eprintln!("(streamed {streamed:?})");
         }
@@ -238,7 +250,12 @@ async fn answers_a_plain_factual_question_briefly() {
         return;
     };
     let (_, answer) = live
-        .turn(Effort::Medium, false, "What is the capital of Australia?", Vec::new())
+        .turn(
+            Effort::Medium,
+            false,
+            "What is the capital of Australia?",
+            Vec::new(),
+        )
         .await;
     assert_helpful(&answer, 80);
     assert!(
@@ -314,7 +331,16 @@ async fn does_not_invent_facts_when_the_web_is_off() {
     assert!(
         contains_any(
             &answer,
-            &["cannot", "can't", "unable", "no access", "don't know", "do not know", "offline", "check"]
+            &[
+                "cannot",
+                "can't",
+                "unable",
+                "no access",
+                "don't know",
+                "do not know",
+                "offline",
+                "check"
+            ]
         ),
         "expected honesty about not being able to check, got: {answer}"
     );
@@ -327,7 +353,12 @@ async fn low_effort_answers_in_one_pass() {
         return;
     };
     let (_, answer) = live
-        .turn(Effort::Low, false, "Name the three primary colours.", Vec::new())
+        .turn(
+            Effort::Low,
+            false,
+            "Name the three primary colours.",
+            Vec::new(),
+        )
         .await;
     assert_helpful(&answer, 40);
     let hits = ["red", "blue", "yellow"]
@@ -375,7 +406,11 @@ fn write_solid_png(width: u32, height: u32, rgb: [u8; 3]) -> Vec<u8> {
         for (index, entry) in table.iter_mut().enumerate() {
             let mut value = index as u32;
             for _ in 0..8 {
-                value = if value & 1 == 1 { 0xEDB8_8320 ^ (value >> 1) } else { value >> 1 };
+                value = if value & 1 == 1 {
+                    0xEDB8_8320 ^ (value >> 1)
+                } else {
+                    value >> 1
+                };
             }
             *entry = value;
         }
