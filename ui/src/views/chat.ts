@@ -99,12 +99,13 @@ function toolsForCall(state: AppState, message: Message): ToolView[] {
     const result = state.session?.messages.find(
       (candidate) => candidate.role === "tool" && candidate.tool_call_id === call.id,
     );
+    const denied = result?.content.startsWith("The user declined") ?? false;
     return {
       id: call.id,
       name: call.name,
       preview: call.arguments.map((argument) => `${argument.name}=${argument.value}`).join(", "),
       risk: "",
-      status: result ? "done" : "running",
+      status: result ? (denied ? "denied" : "done") : "running",
       summary: result ? excerpt(result.content, 160) : "",
       detail: result ? result.content : "",
       thumbnail: null,

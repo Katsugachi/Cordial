@@ -390,10 +390,13 @@ fn run_generation(
         let piece = state.model.token_to_piece(token);
         if piece.is_empty() {
             // Still decode it: the model expects to see its own token.
-            state
-                .context
-                .decode(&[token], pos)
-                .map_err(|err| CoreError::Inference(err.to_string()))?;
+            if let Err(err) = state.context.decode(&[token], pos) {
+                if cancel.load(Ordering::Relaxed) {
+                    stop = GenStop::Cancelled;
+                    break;
+                }
+                return Err(CoreError::Inference(err.to_string()));
+            }
             pos += 1;
             state.cached_tokens.push(token);
             output_tokens += 1;
@@ -425,10 +428,15 @@ fn run_generation(
             sent_bytes = text.len();
         }
 
-        state
-            .context
-            .decode(&[token], pos)
-            .map_err(|err| CoreError::Inference(err.to_string()))?;
+        if let Err(err) = state.context.decode(&[token], pos) {
+            // llama.cpp aborts an in-flight decode when the user stops; that is
+            // a cancellation, not a failure.
+            if cancel.load(Ordering::Relaxed) {
+                stop = GenStop::Cancelled;
+                break;
+            }
+            return Err(CoreError::Inference(err.to_string()));
+        }
         pos += 1;
         state.cached_tokens.push(token);
 
