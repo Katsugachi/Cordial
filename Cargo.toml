@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cordial-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Katsugachi/Cordial"
+rust-version = "1.83"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = "symbols"
