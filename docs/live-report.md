@@ -5,40 +5,44 @@ the same prompts the harness sends in the app, answered by the real
 LFM3-VL-2B Q4_K_M weights on CPU. Regenerate with `make live`.
 
 - Date: 2026-10-31
-- Build: [41229715340](https://github.com/Katsugachi/Cordial/actions/runs/41229715340)
+- Build: [41231720744](https://github.com/Katsugachi/Cordial/actions/runs/41231720744)
 
 - Assertions: 0 passed, 0 failed
 
 ## 1. What is the capital of Australia?
 
-> (Answered, 20 words)
-> The capital of Australia is Canberra. It is located in the Australian Capital Territory, not in any state or territory.
+*answered · 14 words*
+
+> The capital of Australia is Canberra. It is located in the Australian Capital Territory.
 
 ## 2. What is the share price of Apple right now?
 
-> (Answered, 39 words)
-> I don't have live market data, so I can't provide Apple's current share price. You can check a financial website like Yahoo Finance or Google Finance for the latest price. Would you like me to help with anything else?
+*answered · 41 words*
+
+> I don't have real-time market data, so I can't give you Apple's current share price. You can check a financial website or your brokerage app for the latest quote. Would you like me to look up recent news about Apple instead?
 
 ## 3. Name the three primary colours.
 
-> (Answered, 25 words)
+*answered · 25 words*
+
 > The three primary colours are red, blue, and yellow. They are the basic building blocks for mixing other colours in additive and subtractive colour models.
 
 ## 4. A train leaves at 09:40 and the trip takes 1 hour 25 minutes. What time does it arrive?
 
-> (Answered, 27 words)
-> The train arrives at 11:05. 
+*answered · 22 words*
+
+> The train arrives at 11:05.
 >
-> Adding the 1 hour and 25 minutes to the departure time of 09:40 gives 10:40, then adding 25 minutes results in 11:05.
+> Adding one hour to 09:40 gives 10:40, and then adding the remaining 25 minutes results in 11:05.
 
 ## 5. What colour is this image? Answer in one word.
 
-> (Answered, 1 words)
+*answered · 1 words*
+
 > Red
 
 ## 6. Read notes.txt in my workspace and tell me when the project ships.
 
-> (Answered, 34 words)
-> The project ships on November 14th. 
->
-> I read notes.txt from your workspace, which states that Project Meridian ships on the 14th of November, with Sam as the owner and a budget of 42,000 AUD.
+*answered · 13 words*
+
+> The notes say that Project Meridian is scheduled to ship on November 14th.
