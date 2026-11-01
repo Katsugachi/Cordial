@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "What the Cordial window may use.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-open",
+    "opener:allow-open-path",
+    "opener:allow-open-url"
+  ]
+}
