@@ -26,7 +26,7 @@ jobs:
       matrix:
         include:
           - label: macOS arm64
-            os: macos-14
+            os: macos-15
             rust_target: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
             artifact: cordial-macos-arm64
