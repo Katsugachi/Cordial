@@ -296,7 +296,8 @@ fn run_generation(
     let result = run_generation_inner(state, request, deltas, cancel);
     // An aborted decode can leave recurrent model memory partially updated.
     // Never reuse it, even if the token cache appears to match the next prompt.
-    if result.is_err() || cancel.load(Ordering::Relaxed)
+    if result.is_err()
+        || cancel.load(Ordering::Relaxed)
         || matches!(&result, Ok(output) if output.stop == GenStop::Cancelled)
     {
         state.context.clear();

@@ -158,20 +158,29 @@ fn extract_calls(body: &str) -> (String, Vec<ParsedCall>, Option<String>) {
 fn parse_block(block: &str) -> Result<ParsedCall, String> {
     let trimmed = block.trim();
     if trimmed.starts_with('{') {
-        let value: serde_json::Value = serde_json::from_str(trimmed)
-            .map_err(|_| "invalid JSON tool call".to_string())?;
-        let name = value.get("name").and_then(|v| v.as_str())
+        let value: serde_json::Value =
+            serde_json::from_str(trimmed).map_err(|_| "invalid JSON tool call".to_string())?;
+        let name = value
+            .get("name")
+            .and_then(|v| v.as_str())
             .filter(|name| !name.is_empty())
             .ok_or_else(|| "JSON tool call has no function name".to_string())?;
-        let arguments = value.get("arguments")
+        let arguments = value
+            .get("arguments")
             .and_then(|v| v.as_object())
             .ok_or_else(|| "JSON tool call has no arguments object".to_string())?;
         return Ok(ParsedCall {
             name: name.to_string(),
-            arguments: arguments.iter().map(|(key, value)| ToolArgument {
-                name: key.clone(),
-                value: value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string()),
-            }).collect(),
+            arguments: arguments
+                .iter()
+                .map(|(key, value)| ToolArgument {
+                    name: key.clone(),
+                    value: value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string()),
+                })
+                .collect(),
         });
     }
     const FN: &str = "<function=";
@@ -282,15 +291,24 @@ mod tests {
 
     #[test]
     fn parses_explicit_json_tool_call() {
-        let parsed = parse_reply(r#"<tool_call>{"name":"web_search","arguments":{"query":"llama.cpp release notes"}}</tool_call>"#, false);
+        let parsed = parse_reply(
+            r#"<tool_call>{"name":"web_search","arguments":{"query":"llama.cpp release notes"}}</tool_call>"#,
+            false,
+        );
         assert_eq!(parsed.calls.len(), 1);
         assert_eq!(parsed.calls[0].name, "web_search");
-        assert_eq!(parsed.calls[0].arguments[0].value, "llama.cpp release notes");
+        assert_eq!(
+            parsed.calls[0].arguments[0].value,
+            "llama.cpp release notes"
+        );
     }
 
     #[test]
     fn json_arguments_without_a_tool_name_are_not_executed() {
-        let parsed = parse_reply(r#"<tool_call>{"query":"llama.cpp latest release notes","top_n":10}</tool_call>"#, false);
+        let parsed = parse_reply(
+            r#"<tool_call>{"query":"llama.cpp latest release notes","top_n":10}</tool_call>"#,
+            false,
+        );
         assert!(parsed.calls.is_empty());
         assert!(parsed.malformed.is_some());
     }

@@ -109,8 +109,8 @@ impl Live {
             SamplingParams::default(),
         );
         let cancel = Arc::new(AtomicBool::new(false));
-        let (backend, ready) = LlamaBackend::spawn(options, sink.clone(), cancel)
-            .expect("start inference worker");
+        let (backend, ready) =
+            LlamaBackend::spawn(options, sink.clone(), cancel).expect("start inference worker");
         match ready.await {
             Ok(Ok(info)) => eprintln!(
                 "loaded {} on {} ({}k context, vision: {})",
@@ -448,17 +448,38 @@ async fn sees_the_colour_of_an_attached_image() {
 #[tokio::test]
 #[ignore = "downloads the model and runs inference"]
 async fn latest_release_notes_attempts_a_real_search() {
-    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
-    let (session, answer) = live.turn(Effort::Medium, true, "Summarise the latest release notes for llama.cpp", vec![]).await;
-    assert!(session.messages.iter().flat_map(|m| &m.tool_calls).any(|c| c.name == "web_search"), "expected a search, got {answer:?}");
-    assert!(!answer.trim_start().starts_with("{\"query\""), "raw arguments were shown: {answer}");
+    let Some(mut live) = Live::boot().await else {
+        panic!("model unavailable")
+    };
+    let (session, answer) = live
+        .turn(
+            Effort::Medium,
+            true,
+            "Summarise the latest release notes for llama.cpp",
+            vec![],
+        )
+        .await;
+    assert!(
+        session
+            .messages
+            .iter()
+            .flat_map(|m| &m.tool_calls)
+            .any(|c| c.name == "web_search"),
+        "expected a search, got {answer:?}"
+    );
+    assert!(
+        !answer.trim_start().starts_with("{\"query\""),
+        "raw arguments were shown: {answer}"
+    );
     assert!(!answer.trim().is_empty(), "no answer after search");
 }
 
 #[tokio::test]
 #[ignore = "downloads the model and runs inference"]
 async fn cancellation_does_not_break_the_next_turn() {
-    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    let Some(mut live) = Live::boot().await else {
+        panic!("model unavailable")
+    };
     let cancel = live.backend.cancel_flag().expect("cancellation flag");
     cancel.store(false, Ordering::Relaxed);
     let stop_flag = Arc::clone(&cancel);
@@ -472,14 +493,38 @@ async fn cancellation_does_not_break_the_next_turn() {
     let sink = EventSink::silent();
     let mut config = AgentConfig::from_settings(&cordial_core::settings::Settings::default());
     config.web_enabled = false;
-    let mut agent = Agent { backend: &mut live.backend, tools: &live.runtime, policy: &mut policy, approvals: &gate, events: &sink, config };
-    let result = agent.run(&mut session, "Explain how a telescope works in detail.".into(), vec![]).await.unwrap();
+    let mut agent = Agent {
+        backend: &mut live.backend,
+        tools: &live.runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config,
+    };
+    let result = agent
+        .run(
+            &mut session,
+            "Explain how a telescope works in detail.".into(),
+            vec![],
+        )
+        .await
+        .unwrap();
     stopper.await.unwrap();
     assert_eq!(result.stop, cordial_core::events::StopReason::Cancelled);
     drop(agent);
     cancel.store(false, Ordering::Relaxed);
-    let (_, answer) = live.turn(Effort::Low, false, "What is the capital of Australia?", vec![]).await;
-    assert!(answer.to_lowercase().contains("canberra"), "next turn failed: {answer:?}");
+    let (_, answer) = live
+        .turn(
+            Effort::Low,
+            false,
+            "What is the capital of Australia?",
+            vec![],
+        )
+        .await;
+    assert!(
+        answer.to_lowercase().contains("canberra"),
+        "next turn failed: {answer:?}"
+    );
 }
 
 /// Minimal PNG encoder: solid RGB, no filtering, deflate stored blocks.

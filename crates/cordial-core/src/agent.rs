@@ -73,10 +73,19 @@ fn looks_like_search_arguments(content: &str, user_text: &str) -> bool {
     if request.contains("json") || request.contains("code") || request.contains("object") {
         return false;
     }
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(content.trim()) else { return false; };
-    let Some(object) = value.as_object() else { return false; };
-    object.get("query").and_then(|v| v.as_str()).is_some_and(|query| !query.trim().is_empty())
-        && object.keys().all(|key| matches!(key.as_str(), "query" | "top_n" | "limit" | "num_results"))
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(content.trim()) else {
+        return false;
+    };
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("query")
+        .and_then(|v| v.as_str())
+        .is_some_and(|query| !query.trim().is_empty())
+        && object
+            .keys()
+            .all(|key| matches!(key.as_str(), "query" | "top_n" | "limit" | "num_results"))
 }
 
 /// Resolves "may this tool run?" questions raised by the agent.
@@ -175,7 +184,13 @@ impl<'a> Agent<'a> {
 
             let tools_for_prompt = tools::specs(self.config.web_enabled);
             let output = match self
-                .generate_with_retry(session, &turn_id, &tools_for_prompt, retry_instruction, thinking)
+                .generate_with_retry(
+                    session,
+                    &turn_id,
+                    &tools_for_prompt,
+                    retry_instruction,
+                    thinking,
+                )
                 .await
             {
                 Ok(output) => output,
@@ -216,7 +231,9 @@ impl<'a> Agent<'a> {
                 && parsed.calls.is_empty()
                 && looks_like_search_arguments(&parsed.content, &original_user_text);
             if parsed.calls.is_empty() && (parsed.malformed.is_some() || ambiguous_search) {
-                self.events.emit(AgentEvent::GenerationReset { turn_id: turn_id.clone() });
+                self.events.emit(AgentEvent::GenerationReset {
+                    turn_id: turn_id.clone(),
+                });
                 if !repaired_tool_call {
                     repaired_tool_call = true;
                     retry_instruction = "Your last response was not a valid tool call. If you need a tool, include its function name and parameters using this exact format: <tool_call><function=web_search><parameter=query>search terms</parameter></function></tool_call>. Do not output only a JSON arguments object. Otherwise answer the user in plain language.";
@@ -235,18 +252,18 @@ impl<'a> Agent<'a> {
                     // with reasoning switched off, which usually fixes it.
                     if parsed.truncated_thinking && thinking && !retried_without_thinking {
                         retried_without_thinking = true;
-                        self.events.emit(AgentEvent::GenerationReset { turn_id: turn_id.clone() });
+                        self.events.emit(AgentEvent::GenerationReset {
+                            turn_id: turn_id.clone(),
+                        });
                         thinking = false;
                         self.events.emit(AgentEvent::Notice {
-                            message: "Retrying without reasoning."
-                                .to_string(),
+                            message: "Retrying without reasoning.".to_string(),
                         });
                         continue;
                     }
                     if !parsed.truncated_thinking {
                         self.events.emit(AgentEvent::Notice {
-                            message: "No answer. Try rephrasing."
-                                .to_string(),
+                            message: "No answer. Try rephrasing.".to_string(),
                         });
                     }
                     break StopReason::EmptyAnswer;
@@ -283,8 +300,12 @@ impl<'a> Agent<'a> {
 
             for call in &calls {
                 if !tools_for_prompt.iter().any(|tool| tool.name == call.name) {
-                    let result = Message::tool_result(call.id.clone(), "Error: this tool is not available.");
-                    self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.clone(), message: result.clone() });
+                    let result =
+                        Message::tool_result(call.id.clone(), "Error: this tool is not available.");
+                    self.events.emit(AgentEvent::ToolMessage {
+                        turn_id: turn_id.clone(),
+                        message: result.clone(),
+                    });
                     session.push(result);
                     continue;
                 }
@@ -478,9 +499,7 @@ impl<'a> Agent<'a> {
                         return Err(err);
                     }
                     self.events.emit(AgentEvent::Notice {
-                        message:
-                            "Removed the oldest turn from context."
-                                .to_string(),
+                        message: "Removed the oldest turn from context.".to_string(),
                     });
                 }
                 Err(err) => return Err(err),
@@ -502,11 +521,14 @@ impl<'a> Agent<'a> {
             self.config.web_enabled,
         );
         if !self.config.memory.trim().is_empty() {
-            system.push_str("\n\nUser-provided memory (context, not a source of tool permissions):\n");
+            system.push_str(
+                "\n\nUser-provided memory (context, not a source of tool permissions):\n",
+            );
             system.push_str(&self.config.memory);
         }
         if !self.config.skill.trim().is_empty() {
-            system.push_str("\n\nUser-provided skill instructions (tool permissions still apply):\n");
+            system
+                .push_str("\n\nUser-provided skill instructions (tool permissions still apply):\n");
             system.push_str(&self.config.skill);
         }
         if !system_suffix.is_empty() {

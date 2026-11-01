@@ -75,7 +75,11 @@ impl Core {
         } else {
             match model_manager::status_in(&models_dir) {
                 ModelStatus::Ready(paths) | ModelStatus::TextOnly(paths) => paths.weights,
-                ModelStatus::Missing { .. } => return Err(CoreError::ModelNotReady("the model file is missing or incomplete".to_string())),
+                ModelStatus::Missing { .. } => {
+                    return Err(CoreError::ModelNotReady(
+                        "the model file is missing or incomplete".to_string(),
+                    ))
+                }
             }
         };
         if !weights.is_file() {
@@ -273,7 +277,10 @@ impl AppState {
             .map_err(|err| err.to_string())?;
 
         let mut guard = self.core.lock().await;
-        match guard.boot_engine(&self.events, Arc::clone(&self.cancel)).await {
+        match guard
+            .boot_engine(&self.events, Arc::clone(&self.cancel))
+            .await
+        {
             Ok(()) => Ok(()),
             Err(err) => {
                 guard.model_load_error = Some(err.to_string());
@@ -383,9 +390,16 @@ pub fn model_summary(core: &Core) -> ModelSummary {
             description: String::new(),
             context_tokens: core.settings.context_tokens,
             backend: cordial_llama::BACKEND.to_string(),
-            vision: core.model_paths().ok().and_then(|(_, projector)| projector).is_some(),
+            vision: core
+                .model_paths()
+                .ok()
+                .and_then(|(_, projector)| projector)
+                .is_some(),
             missing_bytes: 0,
-            weights_path: core.model_paths().map(|(weights, _)| weights.display().to_string()).unwrap_or_default(),
+            weights_path: core
+                .model_paths()
+                .map(|(weights, _)| weights.display().to_string())
+                .unwrap_or_default(),
             projector_path: String::new(),
         };
     }
@@ -400,7 +414,12 @@ pub fn model_summary(core: &Core) -> ModelSummary {
     };
 
     ModelSummary {
-        status: if core.model_load_error.is_some() { "error" } else { name }.to_string(),
+        status: if core.model_load_error.is_some() {
+            "error"
+        } else {
+            name
+        }
+        .to_string(),
         description: String::new(),
         context_tokens: core.settings.context_tokens,
         backend: cordial_llama::BACKEND.to_string(),

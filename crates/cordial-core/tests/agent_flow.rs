@@ -400,7 +400,10 @@ async fn user_memory_and_skill_are_included_across_sessions() {
     use cordial_core::settings::Settings;
     let fixture = Fixture::new("memory");
     let runtime = fixture.runtime(Effort::Medium);
-    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["First answer.", "Second answer."]));
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![
+        "First answer.",
+        "Second answer.",
+    ]));
     let gate = ApprovalGate::new();
     let mut policy = PermissionPolicy::new(PermissionMode::Manual);
     let (sink, _receiver) = EventSink::channel();
@@ -421,10 +424,18 @@ async fn user_memory_and_skill_are_included_across_sessions() {
             events: &sink,
             config,
         };
-        agent.run(&mut Session::new(), "First chat".into(), vec![]).await.unwrap();
-        agent.run(&mut Session::new(), "Second chat".into(), vec![]).await.unwrap();
+        agent
+            .run(&mut Session::new(), "First chat".into(), vec![])
+            .await
+            .unwrap();
+        agent
+            .run(&mut Session::new(), "Second chat".into(), vec![])
+            .await
+            .unwrap();
     }
-    let Backend::Scripted(scripted) = backend else { panic!("expected scripted backend") };
+    let Backend::Scripted(scripted) = backend else {
+        panic!("expected scripted backend")
+    };
     assert_eq!(scripted.requests.len(), 2);
     for request in scripted.requests {
         assert!(request.prompt.contains("I prefer metric units."));
@@ -451,10 +462,20 @@ async fn ambiguous_search_arguments_trigger_repair_not_execution() {
         None,
     ).await;
     assert_eq!(result.stop, StopReason::Answered);
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::GenerationReset { .. })));
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::GenerationReset { .. })));
     assert!(!session.messages.iter().any(|m| m.content.contains("top_n")));
-    assert!(session.messages.iter().flat_map(|m| &m.tool_calls).any(|c| c.name == "read_file"));
-    assert!(!session.messages.iter().flat_map(|m| &m.tool_calls).any(|c| c.name == "web_search"));
+    assert!(session
+        .messages
+        .iter()
+        .flat_map(|m| &m.tool_calls)
+        .any(|c| c.name == "read_file"));
+    assert!(!session
+        .messages
+        .iter()
+        .flat_map(|m| &m.tool_calls)
+        .any(|c| c.name == "web_search"));
 }
 
 #[tokio::test]
@@ -463,9 +484,18 @@ async fn repeated_malformed_tool_arguments_fail_instead_of_becoming_an_answer() 
     let mut cfg = config(Effort::Medium, PermissionMode::Auto);
     cfg.web_enabled = true;
     let mut session = Session::new();
-    let (result, events) = run_turn(&fixture, vec![r#"{"query":"test"}"#, r#"{"query":"test"}"#], cfg, &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![r#"{"query":"test"}"#, r#"{"query":"test"}"#],
+        cfg,
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Failed);
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::Error { message, .. } if message.contains("couldn't complete"))));
+    assert!(events.iter().any(
+        |e| matches!(e, AgentEvent::Error { message, .. } if message.contains("couldn't complete"))
+    ));
     assert!(!session.messages.iter().any(|m| m.role == Role::Assistant));
 }
 
@@ -481,6 +511,11 @@ async fn disabled_web_tools_are_never_executed_even_if_model_calls_them() {
         None,
     ).await;
     assert_eq!(result.stop, StopReason::Answered);
-    assert!(!events.iter().any(|e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "web_search")));
-    assert!(session.messages.iter().any(|m| m.role == Role::Tool && m.content.contains("not available")));
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "web_search")));
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.role == Role::Tool && m.content.contains("not available")));
 }
