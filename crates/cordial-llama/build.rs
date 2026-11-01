@@ -82,10 +82,20 @@ fn main() {
             .args(["clang", "--print-file-name=libclang_rt.osx.a"])
             .output()
             .expect("find Apple clang compiler-rt");
-        assert!(output.status.success(), "could not locate Apple clang compiler-rt");
+        assert!(
+            output.status.success(),
+            "could not locate Apple clang compiler-rt"
+        );
         let archive = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-        assert!(archive.is_file(), "Apple clang compiler-rt archive not found: {}", archive.display());
-        println!("cargo:rustc-link-search=native={}", archive.parent().unwrap().display());
+        assert!(
+            archive.is_file(),
+            "Apple clang compiler-rt archive not found: {}",
+            archive.display()
+        );
+        println!(
+            "cargo:rustc-link-search=native={}",
+            archive.parent().unwrap().display()
+        );
         println!("cargo:rustc-link-lib=static:-bundle=clang_rt.osx");
     }
     if want_opencl && is_windows {
