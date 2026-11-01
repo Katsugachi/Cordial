@@ -109,8 +109,8 @@ impl Live {
             SamplingParams::default(),
         );
         let cancel = Arc::new(AtomicBool::new(false));
-        let (backend, ready) = LlamaBackend::spawn(options, sink.clone(), cancel)
-            .expect("start inference worker");
+        let (backend, ready) =
+            LlamaBackend::spawn(options, sink.clone(), cancel).expect("start inference worker");
         match ready.await {
             Ok(Ok(info)) => eprintln!(
                 "loaded {} on {} ({}k context, vision: {})",

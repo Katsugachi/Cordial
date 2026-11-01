@@ -400,7 +400,10 @@ async fn user_memory_and_skill_are_included_across_sessions() {
     use cordial_core::settings::Settings;
     let fixture = Fixture::new("memory");
     let runtime = fixture.runtime(Effort::Medium);
-    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["First answer.", "Second answer."]));
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![
+        "First answer.",
+        "Second answer.",
+    ]));
     let gate = ApprovalGate::new();
     let mut policy = PermissionPolicy::new(PermissionMode::Manual);
     let (sink, _receiver) = EventSink::channel();
@@ -421,10 +424,18 @@ async fn user_memory_and_skill_are_included_across_sessions() {
             events: &sink,
             config,
         };
-        agent.run(&mut Session::new(), "First chat".into(), vec![]).await.unwrap();
-        agent.run(&mut Session::new(), "Second chat".into(), vec![]).await.unwrap();
+        agent
+            .run(&mut Session::new(), "First chat".into(), vec![])
+            .await
+            .unwrap();
+        agent
+            .run(&mut Session::new(), "Second chat".into(), vec![])
+            .await
+            .unwrap();
     }
-    let Backend::Scripted(scripted) = backend else { panic!("expected scripted backend") };
+    let Backend::Scripted(scripted) = backend else {
+        panic!("expected scripted backend")
+    };
     assert_eq!(scripted.requests.len(), 2);
     for request in scripted.requests {
         assert!(request.prompt.contains("I prefer metric units."));

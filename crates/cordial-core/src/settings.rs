@@ -215,7 +215,8 @@ mod tests {
             memory: "é".repeat(5000),
             skill: "a".repeat(5000),
             ..Settings::default()
-        }.sanitised(131_072);
+        }
+        .sanitised(131_072);
         assert_eq!(settings.memory.chars().count(), 4000);
         assert_eq!(settings.skill.chars().count(), 4000);
     }

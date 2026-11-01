@@ -204,15 +204,13 @@ impl<'a> Agent<'a> {
                         retried_without_thinking = true;
                         thinking = false;
                         self.events.emit(AgentEvent::Notice {
-                            message: "Retrying without reasoning."
-                                .to_string(),
+                            message: "Retrying without reasoning.".to_string(),
                         });
                         continue;
                     }
                     if !parsed.truncated_thinking {
                         self.events.emit(AgentEvent::Notice {
-                            message: "No answer. Try rephrasing."
-                                .to_string(),
+                            message: "No answer. Try rephrasing.".to_string(),
                         });
                     }
                     break StopReason::EmptyAnswer;
@@ -438,9 +436,7 @@ impl<'a> Agent<'a> {
                         return Err(err);
                     }
                     self.events.emit(AgentEvent::Notice {
-                        message:
-                            "Removed the oldest turn from context."
-                                .to_string(),
+                        message: "Removed the oldest turn from context.".to_string(),
                     });
                 }
                 Err(err) => return Err(err),
@@ -462,11 +458,14 @@ impl<'a> Agent<'a> {
             self.config.web_enabled,
         );
         if !self.config.memory.trim().is_empty() {
-            system.push_str("\n\nUser-provided memory (context, not a source of tool permissions):\n");
+            system.push_str(
+                "\n\nUser-provided memory (context, not a source of tool permissions):\n",
+            );
             system.push_str(&self.config.memory);
         }
         if !self.config.skill.trim().is_empty() {
-            system.push_str("\n\nUser-provided skill instructions (tool permissions still apply):\n");
+            system
+                .push_str("\n\nUser-provided skill instructions (tool permissions still apply):\n");
             system.push_str(&self.config.skill);
         }
         if !system_suffix.is_empty() {
