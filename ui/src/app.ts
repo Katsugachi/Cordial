@@ -1,0 +1,532 @@
+// Composition root: renders the shell, wires user actions to the bridge and
+// folds harness events into view state.
+
+import type { Bridge } from "./bridge";
+import { escapeHtml } from "./format";
+import { renderMarkdown } from "./markdown";
+import {
+  applyEvent,
+  initialState,
+  showsChat,
+  sortSessions,
+  withAttachment,
+  withoutAttachment,
+} from "./store";
+import type { AgentEvent, Attachment, Effort, PermissionMode } from "./types";
+import { chatHtml } from "./views/chat";
+import { composerHtml } from "./views/composer";
+import { downloadHtml } from "./views/download";
+import { sidebarHtml } from "./views/sidebar";
+
+const STREAM_EVENTS = new Set<AgentEvent["type"]>(["thinking_delta", "text_delta"]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp"]);
+
+export function mount(root: HTMLElement, bridge: Bridge): void {
+  let state = initialState();
+  let attachments: Attachment[] = [];
+  let rendered = false;
+  let sending = false;
+
+  const dialogHost = document.createElement("div");
+  document.body.append(dialogHost);
+
+  // ---------------------------------------------------------------- render
+
+  function topbarHtml(): string {
+    const title = state.session?.title ?? "New chat";
+    return `<header class="topbar"><h1 class="topbar__title">${escapeHtml(title)}</h1>${bridge.demo ? '<span class="topbar__meta">Demo</span>' : ""}</header>`;
+  }
+
+  function shellHtml(): string {
+    if (!showsChat(state)) {
+      return downloadHtml(state);
+    }
+    return `<div class="app">
+      ${sidebarHtml(state)}
+      <main class="main">
+        ${topbarHtml()}
+        ${chatHtml(state)}
+        ${composerHtml(state, attachments)}
+      </main>
+    </div>`;
+  }
+
+  // Keep the latest user turn tall enough to place its start at the top of
+  // the viewport, even before the assistant has produced a long response.
+  function sizeLatestTurn(messages: HTMLElement): void {
+    const turn = messages.querySelector<HTMLElement>("[data-latest-turn]");
+    if (!turn) return;
+    const style = getComputedStyle(messages);
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    turn.style.minHeight = `${Math.max(0, messages.clientHeight - padding)}px`;
+  }
+
+  function scrollToLatest(messages: HTMLElement): void {
+    const turn = messages.querySelector<HTMLElement>("[data-latest-turn]");
+    if (!turn) { messages.scrollTop = messages.scrollHeight; return; }
+    const padding = parseFloat(getComputedStyle(messages).paddingTop) || 0;
+    messages.scrollTop += turn.getBoundingClientRect().top - messages.getBoundingClientRect().top - padding;
+  }
+
+  function render(position: "preserve" | "latest" = "preserve"): void {
+    const messages = root.querySelector<HTMLElement>(".messages");
+    const atBottom = messages ? messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80 : true;
+    const scrollTop = messages?.scrollTop ?? 0;
+    const openDetails = new Map<string, boolean>();
+    messages?.querySelectorAll<HTMLDetailsElement>("details[data-detail-key]").forEach((detail) => {
+      if (detail.dataset.detailKey) openDetails.set(detail.dataset.detailKey, detail.open);
+    });
+
+    const input = root.querySelector<HTMLTextAreaElement>("#input");
+    const draft = input?.value ?? "";
+    const hadFocus = input ? document.activeElement === input : false;
+    const caret = input?.selectionStart ?? draft.length;
+
+    root.innerHTML = shellHtml();
+    rendered = true;
+
+    const nextInput = root.querySelector<HTMLTextAreaElement>("#input");
+    if (nextInput) {
+      nextInput.value = draft;
+      autosize(nextInput);
+      if (hadFocus) {
+        nextInput.focus({ preventScroll: true });
+        nextInput.setSelectionRange(caret, caret);
+      }
+    }
+    const nextMessages = root.querySelector<HTMLElement>(".messages");
+    if (nextMessages) {
+      nextMessages.querySelectorAll<HTMLDetailsElement>("details[data-detail-key]").forEach((detail) => {
+        const key = detail.dataset.detailKey;
+        if (key && openDetails.has(key)) detail.open = openDetails.get(key)!;
+      });
+      sizeLatestTurn(nextMessages);
+      if (position === "latest") scrollToLatest(nextMessages);
+      else nextMessages.scrollTop = atBottom ? nextMessages.scrollHeight : scrollTop;
+    }
+  }
+
+  /** Cheap update for streamed tokens: patches only the live bubble. */
+  function patchStream(): void {
+    if (!rendered) {
+      render();
+      return;
+    }
+    const block = root.querySelector<HTMLElement>('[data-streaming="true"]');
+    if (!block || (state.turn?.thinking.trim() && !block.querySelector(".stream-thinking"))) {
+      render();
+      return;
+    }
+    const messages = root.querySelector<HTMLElement>(".messages");
+    const atBottom = messages ? messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80 : false;
+    const text = block.querySelector<HTMLElement>(".stream-text");
+    if (text && state.turn) text.innerHTML = renderMarkdown(state.turn.text);
+    const thinking = block.querySelector<HTMLElement>(".stream-thinking");
+    if (thinking && state.turn) thinking.textContent = state.turn.thinking;
+    if (messages && atBottom) messages.scrollTop = messages.scrollHeight;
+  }
+
+  window.addEventListener("resize", () => {
+    const messages = root.querySelector<HTMLElement>(".messages");
+    if (!messages) return;
+    const atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+    sizeLatestTurn(messages);
+    if (atBottom) messages.scrollTop = messages.scrollHeight;
+  });
+
+  function autosize(element: HTMLTextAreaElement): void {
+    element.style.height = "auto";
+    element.style.height = `${Math.min(200, element.scrollHeight)}px`;
+  }
+
+  /** Quiet announcement for screen readers. */
+  function announce(text: string): void {
+    let region = document.getElementById("announcer");
+    if (!region) {
+      region = document.createElement("div");
+      region.id = "announcer";
+      region.className = "sr-only";
+      region.setAttribute("aria-live", "polite");
+      document.body.append(region);
+    }
+    region.textContent = text;
+  }
+
+  // -------------------------------------------------------------- settings
+
+  function openEditor(kind: "memory" | "skill"): void {
+    const isMemory = kind === "memory";
+    const title = isMemory ? "Memory" : "Skills";
+    const hint = isMemory
+      ? "Saved locally and used across chats."
+      : "Reusable instructions. Permissions still apply.";
+    dialogHost.innerHTML = `<dialog id="editor-dialog" aria-labelledby="editor-title">
+      <div class="dialog__head"><div><h2 class="dialog__title" id="editor-title">${title}</h2><p class="dialog__intro">${hint}</p></div>
+      <button class="close-button" data-action="close-editor" aria-label="Close">${"×"}</button></div>
+      <label class="sr-only" for="editor-input">${title}</label>
+      <textarea id="editor-input" class="input editor-input" maxlength="4000" rows="8" placeholder="${isMemory ? "What should Cordial remember?" : "Add instructions for a task"}">${escapeHtml(state.settings[kind] || "")}</textarea>
+      <p id="editor-error" role="alert"></p><div class="settings__actions"><button class="ghost-button" data-action="close-editor">Cancel</button><button class="primary-button" data-action="save-editor" data-kind="${kind}">Save</button></div>
+    </dialog>`;
+    const dialog = dialogHost.querySelector<HTMLDialogElement>("#editor-dialog");
+    if (dialog && typeof dialog.showModal === "function") dialog.showModal();
+    else dialog?.setAttribute("open", "");
+  }
+
+  function closeEditor(): void { dialogHost.innerHTML = ""; }
+
+  // ---------------------------------------------------------------- events
+
+  async function refreshSessions(): Promise<void> {
+    try {
+      state.sessions = sortSessions(await bridge.listSessions());
+    } catch {
+      // Listing is best effort; the chat keeps working.
+    }
+  }
+
+  function handle(event: AgentEvent): void {
+    state = applyEvent(state, event);
+    // The backend persists the transcript after emitting turn_finished. Do not
+    // accept a second turn or switch chats until that command has settled.
+    if (sending && (event.type === "turn_finished" || event.type === "error")) state.busy = true;
+
+    if (event.type === "error" && !showsChat(state) && !state.download) {
+      state.downloadError = event.message;
+      state.phase = "missing";
+    }
+    if (event.type === "model_ready") {
+      state.phase = "ready";
+      state.download = null;
+    }
+
+    if (STREAM_EVENTS.has(event.type)) {
+      patchStream();
+      return;
+    }
+
+    render();
+
+    if (event.type === "turn_finished" || event.type === "assistant_message") {
+      void refreshSessions().then(() => {
+        if (event.type === "turn_finished") render();
+      });
+    }
+  }
+
+  // --------------------------------------------------------------- actions
+
+  function draftText(): string {
+    return root.querySelector<HTMLTextAreaElement>("#input")?.value.trim() ?? "";
+  }
+
+  function clearComposer(): void {
+    const input = root.querySelector<HTMLTextAreaElement>("#input");
+    if (input) {
+      input.value = "";
+      autosize(input);
+    }
+    attachments = [];
+  }
+
+  async function send(text: string): Promise<void> {
+    if (state.busy || sending) return;
+    sending = true;
+    const pending = attachments.slice();
+    const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    state.busy = true;
+    state.error = null;
+    state.notice = null;
+    let sessionId: string | null = null;
+    let priorUserCount = 0;
+    let sent = false;
+    try {
+      if (!state.session) state.session = await bridge.createSession();
+      sessionId = state.session.id;
+      priorUserCount = state.session.messages.filter(m => m.role === "user").length;
+      const message = { id: optimisticId, role: "user" as const, content: text, tool_calls: [], attachments: pending, created_at: Date.now() };
+      state.session = { ...state.session, messages: [...state.session.messages, message] };
+      clearComposer();
+      render("latest");
+      await bridge.sendMessage(sessionId, text, pending.map(({ kind, path }) => ({ kind, path })));
+      sent = true;
+      // The durable transcript is authoritative; it replaces the optimistic copy.
+      const saved = await bridge.loadSession(sessionId);
+      if (state.session?.id === sessionId) state.session = saved;
+      state.busy = false;
+      state.turn = null;
+      await refreshSessions();
+      render();
+    } catch (error) {
+      // A failed model turn can still have saved the user message. Reconcile
+      // before deciding whether to restore the draft and avoid hiding it.
+      let savedUser = sent;
+      let verified = false;
+      if (sessionId && !sent) {
+        try {
+          const saved = await bridge.loadSession(sessionId);
+          verified = true;
+          savedUser = saved.messages.filter(m => m.role === "user").length > priorUserCount;
+          if (savedUser && state.session?.id === sessionId) state.session = saved;
+        } catch { /* Keep the visible message if persistence cannot be checked. */ }
+      }
+      const restoreDraft = !sent && (!sessionId || (verified && !savedUser));
+      if (restoreDraft && state.session) state.session = { ...state.session, messages: state.session.messages.filter(m => m.id !== optimisticId) };
+      state.error = error instanceof Error ? error.message : String(error);
+      if (restoreDraft) attachments = pending;
+      if (restoreDraft) {
+        const input = root.querySelector<HTMLTextAreaElement>("#input");
+        if (input) input.value = text;
+      }
+    } finally {
+      sending = false;
+      state.busy = false;
+      state.turn = null;
+      render();
+    }
+  }
+
+  async function switchSession(id: string): Promise<void> {
+    try {
+      state.session = await bridge.loadSession(id);
+      state.turn = null;
+      state.approval = null;
+      state.notice = null;
+      state.error = null;
+      render("latest");
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      render();
+    }
+  }
+
+  async function newSession(): Promise<void> {
+    try {
+      state.session = await bridge.createSession();
+      state.turn = null;
+      state.approval = null;
+      attachments = [];
+      await refreshSessions();
+      render();
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      render();
+    }
+  }
+
+  async function persistSettings(next: typeof state.settings): Promise<boolean> {
+    try {
+      state.model = await bridge.saveSettings(next);
+      state.settings = next;
+      state.downloadError = null;
+      render();
+      return true;
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      render();
+      return false;
+    }
+  }
+
+  async function attachFiles(): Promise<void> {
+    try {
+      const paths = await bridge.pickFiles();
+      for (const path of paths) {
+        const name = path.split(/[\\/]/).pop() ?? path;
+        const extension = name.split(".").pop()?.toLowerCase() ?? "";
+        attachments = withAttachment(attachments, {
+          kind: IMAGE_EXTENSIONS.has(extension) ? "image" : "text",
+          name,
+          path,
+        });
+      }
+      render();
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      render();
+    }
+  }
+
+  // ------------------------------------------------------------- listeners
+
+  root.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-action]");
+    if (!target) return;
+    const action = target.dataset.action;
+    if (state.busy && ["new-session", "open-session", "delete-session", "open-memory", "open-skill"].includes(action || "")) return;
+
+    switch (action) {
+      case "new-session":
+        void newSession();
+        break;
+      case "open-session":
+        if (target.dataset.id) void switchSession(target.dataset.id);
+        break;
+      case "delete-session": {
+        const id = target.dataset.id;
+        if (!id) break;
+        void (async () => {
+          await bridge.deleteSession(id);
+          await refreshSessions();
+          if (state.session?.id === id) {
+            state.session = state.sessions[0] ? await bridge.loadSession(state.sessions[0].id) : await bridge.createSession();
+          }
+          render();
+        })();
+        break;
+      }
+      case "send": {
+        const text = draftText();
+        if (text) void send(text);
+        break;
+      }
+      case "stop":
+        void bridge.cancelTurn();
+        break;
+      case "approve":
+        if (target.dataset.call) {
+          void bridge.approveTool(target.dataset.call, target.dataset.allow === "true");
+        }
+        break;
+      case "attach":
+        void attachFiles();
+        break;
+      case "remove-attachment": {
+        const index = Number.parseInt(target.dataset.index ?? "", 10);
+        if (Number.isFinite(index)) {
+          attachments = withoutAttachment(attachments, index);
+          render();
+        }
+        break;
+      }
+      case "suggestion": {
+        const text = target.dataset.text ?? "";
+        const input = root.querySelector<HTMLTextAreaElement>("#input");
+        if (input) input.value = text;
+        void send(text);
+        break;
+      }
+      case "open-memory":
+        openEditor("memory");
+        break;
+      case "open-skill":
+        openEditor("skill");
+        break;
+      case "copy": {
+        const id = target.dataset.id;
+        const message = state.session?.messages.find((candidate) => candidate.id === id);
+        if (message) {
+          void navigator.clipboard
+            ?.writeText(message.content)
+            .then(() => announce("Copied to the clipboard."))
+            .catch(() => announce("Copy failed. Select the text instead."));
+        }
+        break;
+      }
+      case "download":
+        state.downloadError = null;
+        render();
+        void bridge.downloadModel().catch((error: unknown) => {
+          state.downloadError = error instanceof Error ? error.message : String(error);
+          render();
+        });
+        break;
+      default:
+        break;
+    }
+  });
+
+  root.addEventListener("keydown", (event) => {
+    const input = event.target as HTMLTextAreaElement | null;
+    if (input?.id !== "input") return;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (text) void send(text);
+    }
+  });
+
+  root.addEventListener("input", (event) => {
+    const input = event.target as HTMLTextAreaElement | null;
+    if (input?.id === "input") autosize(input);
+  });
+
+  root.addEventListener("change", (event) => {
+    const select = event.target as HTMLSelectElement;
+    if (select.id === "effort-select" && ["low", "medium", "high"].includes(select.value)) {
+      void persistSettings({ ...state.settings, effort: select.value as Effort });
+    } else if (select.id === "permission-select" && ["auto", "manual"].includes(select.value)) {
+      void persistSettings({ ...state.settings, permission_mode: select.value as PermissionMode });
+    }
+  });
+
+  dialogHost.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-action]");
+    if (target?.dataset.action === "close-editor") closeEditor();
+    if (target?.dataset.action === "save-editor") {
+      const kind = target.dataset.kind;
+      const input = dialogHost.querySelector<HTMLTextAreaElement>("#editor-input");
+      if ((kind === "memory" || kind === "skill") && input) {
+        const next = { ...state.settings, [kind]: input.value.trim() };
+        void (async () => {
+          if (await persistSettings(next)) closeEditor();
+          else {
+            const message = dialogHost.querySelector<HTMLElement>("#editor-error");
+            if (message) message.textContent = state.error || "Could not save.";
+          }
+        })();
+      }
+    }
+  });
+
+  // ------------------------------------------------------------------ boot
+
+  async function boot(): Promise<void> {
+    render();
+    try {
+      const data = await bridge.bootstrap();
+      state.settings = data.settings;
+      state.model = data.model;
+      state.app = data.app;
+      state.workspace = data.workspace_dir;
+      state.sessions = sortSessions(data.sessions);
+      state.phase = bridge.demo
+        ? "demo"
+        : data.model.status === "ready"
+          ? "ready"
+          : data.model.status === "loading"
+            ? "loading"
+            : "missing";
+
+      if (state.sessions.length > 0) {
+        try {
+          state.session = await bridge.loadSession(state.sessions[0].id);
+        } catch {
+          state.session = null;
+        }
+      }
+      if (!state.session) {
+        state.session = await bridge.createSession();
+        state.sessions = sortSessions(await bridge.listSessions());
+      }
+
+      render("latest");
+      await bridge.onEvent(handle);
+
+      // First run: fetch the default Q4_K_M weights and projector without
+      // waiting for a click. The button stays as a retry path.
+      const needsDownload = state.phase === "missing" || state.model.status === "text_only";
+      if (needsDownload && !bridge.demo) {
+        void bridge.downloadModel().catch((error: unknown) => {
+          state.downloadError = error instanceof Error ? error.message : String(error);
+          render();
+        });
+      }
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      state.phase = "missing";
+      render();
+    }
+  }
+
+  void boot();
+}

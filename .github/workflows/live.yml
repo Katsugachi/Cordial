@@ -1,0 +1,52 @@
+name: Live model
+
+# Behavioural suite against the real LFM3-VL-2B weights. Slow (downloads 1.3 GB
+# and runs CPU inference), so it is manual and on a weekly schedule rather than
+# on every push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+concurrency:
+  group: live-model
+  cancel-in-progress: false
+
+jobs:
+  behaviour:
+    name: Prompts against LFM3-VL-2B
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: "0"
+      CORDIAL_PORTABLE_CPU: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cordial-rust
+          cache-on-failure: true
+      - name: Cache the weights
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cordial-models
+          key: lfm3-vl-2b-q4km-mmproj-q8
+      - name: Run the suite
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            2>&1 | tee /tmp/live.log
+      - name: Publish the transcript
+        if: always()
+        run: |
+          python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
+          git config user.name "cordial-live"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/live-report.md
+          git diff --cached --quiet || {
+            git commit -m "docs: live model transcript"
+            git push
+          }

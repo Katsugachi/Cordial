@@ -1,0 +1,175 @@
+name: Release
+
+# Builds installers for every supported target. Triggered by a version tag or by
+# hand, so a release can be rehearsed without publishing.
+on:
+  push:
+    tags: ["v*"]
+    branches: ["arena/069c3501-cordial"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-14
+            rust_target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+            artifact: cordial-macos-arm64
+            opencl: "0"
+          - label: macOS x64
+            os: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+            artifact: cordial-macos-x64
+            opencl: "0"
+          - label: Windows x64
+            os: windows-2022
+            rust_target: ""
+            args: ""
+            artifact: cordial-windows-x64
+            opencl: "0"
+          - label: Windows arm64 (OpenCL)
+            os: windows-11-arm
+            rust_target: aarch64-pc-windows-msvc
+            args: --target aarch64-pc-windows-msvc
+            artifact: cordial-windows-arm64
+            opencl: "1"
+          - label: Linux x64
+            os: ubuntu-22.04
+            rust_target: ""
+            args: ""
+            artifact: cordial-linux-x64
+            opencl: "0"
+          - label: Linux arm64
+            os: ubuntu-24.04-arm
+            rust_target: ""
+            args: ""
+            artifact: cordial-linux-arm64
+            opencl: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tauri system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.artifact }}
+          cache-on-failure: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+
+      - name: Build and bundle
+        shell: bash
+        env:
+          CORDIAL_PORTABLE_CPU: "1"
+          CORDIAL_GGML_OPENCL: ${{ matrix.opencl }}
+        run: |
+          scripts/ci/report.sh bash -c 'cd crates/cordial-app && ../../ui/node_modules/.bin/tauri build ${{ matrix.args }}'
+
+      - name: Collect bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            crates/cordial-app/target/**/release/bundle/dmg/*.dmg
+            crates/cordial-app/target/**/release/bundle/msi/*.msi
+            crates/cordial-app/target/**/release/bundle/nsis/*.exe
+            crates/cordial-app/target/**/release/bundle/deb/*.deb
+            crates/cordial-app/target/**/release/bundle/appimage/*.AppImage
+            target/**/release/bundle/dmg/*.dmg
+            target/**/release/bundle/msi/*.msi
+            target/**/release/bundle/nsis/*.exe
+            target/**/release/bundle/deb/*.deb
+            target/**/release/bundle/appimage/*.AppImage
+
+  validation:
+    name: UI and core tests
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm --prefix ui ci
+      - run: npm --prefix ui run test
+      - run: npm --prefix ui run typecheck
+      - name: Core unit and agent tests
+        run: scripts/ci/report.sh cargo test -p cordial-core --lib --test agent_flow
+
+  smoke:
+    name: Behavioural smoke test (real model)
+    needs: [build, validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run the prompt suite against LFM3-VL-2B
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          RUST_TEST_THREADS: "1"
+        run: scripts/ci/report.sh cargo test -p cordial-core --test live_model -- --ignored --nocapture
+
+  draft-release:
+    name: Create draft release from verified bundles
+    if: github.ref_type == 'branch' && contains(github.event.head_commit.message, '[release]')
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cordial-*
+          path: bundles
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: v0.1.0-preview-${{ github.run_number }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find bundles -type f -print0)
+          test "${#files[@]}" -gt 0
+          gh release create "$RELEASE_TAG" "${files[@]}" --target "$RELEASE_COMMIT" --draft --prerelease \
+            --title "Cordial preview ${{ github.run_number }}" \
+            --notes "Preview installers built by GitHub Actions. Not signed or notarized. Test on each target device before publishing."

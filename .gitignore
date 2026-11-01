@@ -1,0 +1,20 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+node_modules/
+ui/dist/
+
+# Model weights (never commit)
+*.gguf
+/models/
+
+# Local dev
+.env
+.DS_Store
+*.log
+/scratch/
+
+# Tauri generated
+crates/cordial-app/gen/
