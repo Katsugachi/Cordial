@@ -233,7 +233,12 @@ fn configure(
         .arg("-DGGML_CCACHE=OFF")
         .arg("-DGGML_RPC=OFF");
 
-    if flag("CORDIAL_PORTABLE_CPU") {
+    // llama.cpp b12020 explicitly rejects GGML_NATIVE=OFF on MSVC ARM.
+    // This target must therefore be validated on the intended Windows ARM
+    // devices; a native build does not guarantee portability to every CPU.
+    if target.contains("aarch64-pc-windows-msvc") {
+        cmd.arg("-DGGML_NATIVE=ON");
+    } else if flag("CORDIAL_PORTABLE_CPU") {
         cmd.arg("-DGGML_NATIVE=OFF");
     } else {
         cmd.arg("-DGGML_NATIVE=ON");
