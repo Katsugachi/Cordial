@@ -75,6 +75,19 @@ fn main() {
     build(&build_dir);
 
     link(&build_dir, is_windows, is_apple, is_msvc);
+    if is_apple {
+        // Objective-C availability checks in Metal need compiler-rt. Rust's
+        // final link uses -nodefaultlibs and may omit the weak std copy under LTO.
+        let output = Command::new("xcrun")
+            .args(["clang", "--print-file-name=libclang_rt.osx.a"])
+            .output()
+            .expect("find Apple clang compiler-rt");
+        assert!(output.status.success(), "could not locate Apple clang compiler-rt");
+        let archive = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+        assert!(archive.is_file(), "Apple clang compiler-rt archive not found: {}", archive.display());
+        println!("cargo:rustc-link-search=native={}", archive.parent().unwrap().display());
+        println!("cargo:rustc-link-lib=static:-bundle=clang_rt.osx");
+    }
     if want_opencl && is_windows {
         // ggml-opencl is static. Its OpenCL loader dependency and its Windows
         // system libraries must also be passed to Rust's final linker.
