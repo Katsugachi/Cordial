@@ -15,8 +15,7 @@ if [ "$status" -ne 0 ]; then
   echo "==== failure summary (also published as annotations) ===="
   # GitHub limits annotations per step. Put the complete tail in the first
   # annotation so CMake's underlying error is not lost behind Rust's wrapper.
-  summary=$(tail -n 120 "$log" | sed -e 's/%/%25/g' -e 's/
-/%0D/g' | awk '{printf "%s%%0A", $0}')
+  summary=$({ grep -A 10 -E 'CMake Error|Could NOT find|fatal error|error\[|^error:' "$log" | head -45 || true; echo '--- log tail ---'; tail -n 25 "$log"; } | cut -c1-300 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
   printf '::error title=Build failure details::%s\n' "$summary"
   free -m 2>/dev/null | head -3 || true
   df -h . 2>/dev/null | tail -1 || true
