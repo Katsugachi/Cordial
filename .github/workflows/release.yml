@@ -90,22 +90,12 @@ jobs:
         run: npm --prefix ui ci
 
       - name: Build and bundle
-        uses: tauri-apps/tauri-action@v0
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Distributable CPU build: no -march=native, so the binary runs on any
-          # machine of the same architecture.
           CORDIAL_PORTABLE_CPU: "1"
-          # Windows ARM64 has no first-class GPU compute path in llama.cpp; the
-          # build script picks OpenCL there, and this flag makes it explicit.
           CORDIAL_GGML_OPENCL: ${{ matrix.opencl }}
-        with:
-          projectPath: crates/cordial-app
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: ${{ github.ref_type == 'tag' && format('Cordial {0}', github.ref_name) || '' }}
-          releaseDraft: true
-          prerelease: false
+        run: |
+          scripts/ci/report.sh bash -c 'cd crates/cordial-app && ../../ui/node_modules/.bin/tauri build ${{ matrix.args }}'
 
       - name: Collect bundles
         uses: actions/upload-artifact@v4
