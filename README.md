@@ -117,10 +117,6 @@ image. It is the suite to run after changing the system prompt or sampler.
 Each live run publishes what the model actually said to
 [`docs/live-report.md`](docs/live-report.md), so prompt quality can be reviewed
 without a local GPU or a 1.3 GB download.
-
-
-## Licences
-
 Cordial is MIT licensed ([`LICENSE`](LICENSE)). LFM3-VL-2B weights are released
 by Liquid AI under the [LFM Open License v1.0](https://huggingface.co/LiquidAI/LICENSE);
 llama.cpp is MIT. Cordial downloads weights at runtime and does not redistribute
