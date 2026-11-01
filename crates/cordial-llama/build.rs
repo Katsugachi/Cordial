@@ -75,6 +75,14 @@ fn main() {
     build(&build_dir);
 
     link(&build_dir, is_windows, is_apple, is_msvc);
+    if want_opencl && is_windows {
+        // ggml-opencl is static. Its OpenCL loader dependency and its Windows
+        // system libraries must also be passed to Rust's final linker.
+        println!("cargo:rustc-link-search=native={}", out_dir.join("opencl-sdk/lib").display());
+        println!("cargo:rustc-link-lib=static=OpenCL");
+        println!("cargo:rustc-link-lib=cfgmgr32");
+        println!("cargo:rustc-link-lib=runtimeobject");
+    }
 
     compile_shim(&src, &out_dir);
 
@@ -295,7 +303,7 @@ fn windows_opencl(out_dir: &Path) -> (PathBuf, PathBuf) {
             .arg(&loader_build)
             .arg("-DCMAKE_BUILD_TYPE=Release")
             .arg("-DBUILD_SHARED_LIBS=OFF")
-            .arg(format!("-DOPENCL_HEADERS_DIR={}", headers.display()));
+            .arg(format!("-DOPENCL_ICD_LOADER_HEADERS_DIR={}", headers.display()));
         run(cmd, "cmake configure (OpenCL ICD loader)");
 
         let mut cmd = Command::new(cmake_bin());
@@ -315,7 +323,7 @@ fn windows_opencl(out_dir: &Path) -> (PathBuf, PathBuf) {
         );
     }
 
-    (headers.join("OpenCL"), loader_lib)
+    (headers, loader_lib)
 }
 
 fn build(build_dir: &Path) {
