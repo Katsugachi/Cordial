@@ -87,6 +87,7 @@ pub struct EngineOptions {
 pub struct LlamaBackend {
     sender: std::sync::mpsc::Sender<WorkerCommand>,
     cancel: Arc<AtomicBool>,
+    worker: Option<std::thread::JoinHandle<()>>,
 }
 
 impl LlamaBackend {
@@ -107,7 +108,7 @@ impl LlamaBackend {
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
         let cancel_for_worker = Arc::clone(&cancel);
 
-        std::thread::Builder::new()
+        let worker = std::thread::Builder::new()
             .name("cordial-inference".to_string())
             .stack_size(16 * 1024 * 1024)
             .spawn(move || {
@@ -121,6 +122,7 @@ impl LlamaBackend {
             Self {
                 sender: command_tx,
                 cancel,
+                worker: Some(worker),
             },
             ready_rx,
         ))
@@ -178,6 +180,17 @@ impl LlamaBackend {
     /// Stops the worker thread.
     pub fn shutdown(&self) {
         let _ = self.sender.send(WorkerCommand::Shutdown);
+    }
+}
+
+impl Drop for LlamaBackend {
+    fn drop(&mut self) {
+        // Close the inference worker before returning so mapped model files can
+        // be removed reliably, especially on Windows.
+        let _ = self.sender.send(WorkerCommand::Shutdown);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
     }
 }
 
