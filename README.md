@@ -8,7 +8,7 @@ the web, drives a browser, reads your files, and looks at images, powered by
 [llama.cpp](https://github.com/ggml-org/llama.cpp)
 
 Cordial is a desktop app: a thin Rust/Tauri shell around a local agentic harness.
-On first launch it downloads the Q4_K_M weights (1.1 GB) plus the vision
+On first launch it downloads the Q4_K_M weights (1.1 GB) + the vision
 projector (203 MB), and from then on the network is used only when the agent
 searches or browses for you.  <br><br>
 The X post from LiquidAI said it was almost as capable as GPT 5.6 Luna and i guess if it's stable enough to be in Cordial that's good. <br><br>
