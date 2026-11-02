@@ -1,0 +1,11 @@
+# Cordial
+
+> A highly efficient, lightweight local AI agent and private desktop assistant.
+
+Cordial is a private agent that runs completely offline on consumer hardware. It answers questions, checks facts via local browser automation, and processes images using the LFM3-VL-2B vision-language model driven natively via llama.cpp.
+
+## Key Features
+- **Lightweight Architecture**: Built as a lightweight native Rust/Tauri desktop shell wrapped around a fast C++/Rust agentic harness.
+- **Local & Private**: Zero telemetry, zero cloud tracking, and zero external API dependencies. Runs entirely on local machine resources.
+- **Native Browser Automation**: Drives a real local browser over the Chrome DevTools Protocol (CDP) allowing the 2B vision model to see and navigate pages.
+- **Low Resource Footprint**: Automatically manages and streams highly optimized Q4_K_M weights (1.1 GB) and vision projectors locally.
