@@ -196,10 +196,14 @@ jobs:
           tag_args=(--target "$RELEASE_COMMIT")
           remote_tag="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
           if test -n "$remote_tag" || [[ "$RELEASE_TAG_INPUT" == "$RELEASE_TAG" ]]; then
-            # A version-tag run publishes the exact tag that triggered it.
+            # Verify the remote tag without re-fetching a tag already present in
+            # the shallow checkout. Resolve annotated tags to their commit.
             test "$RELEASE_TAG_INPUT" = "$RELEASE_TAG"
-            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+            remote_commit="$(git ls-remote origin "refs/tags/$RELEASE_TAG^{}" | awk '{print $1}')"
+            if test -z "$remote_commit"; then
+              remote_commit="$(printf '%s\n' "$remote_tag" | awk '{print $1}')"
+            fi
+            test "$remote_commit" = "$RELEASE_COMMIT"
             tag_args=(--verify-tag)
           fi
 
