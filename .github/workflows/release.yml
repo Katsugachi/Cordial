@@ -1,24 +1,34 @@
 name: Release
 
-# Builds installers for every supported target. Triggered by a version tag or by
-# hand, so a release can be rehearsed without publishing.
+# Builds installers for every supported target. A manual run can rehearse the
+# builds without publishing, or publish a verified prerelease with an explicit
+# preview number (never the workflow run count).
 on:
   push:
     tags: ["v*"]
-    branches: ["arena/069c3501-cordial"]
   workflow_dispatch:
+    inputs:
+      preview_number:
+        description: "Preview number (for example, 10)"
+        required: true
+        default: "10"
+        type: string
+      publish:
+        description: "Publish the verified installers as a prerelease"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}-${{ github.sha }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.preview_number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
     name: ${{ matrix.label }}
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[release]') || contains(github.event.head_commit.message, '[review]'))
     runs-on: ${{ matrix.os }}
     timeout-minutes: 240
     strategy:
@@ -116,7 +126,6 @@ jobs:
 
   validation:
     name: UI and core tests
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[release]') || contains(github.event.head_commit.message, '[review]'))
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
@@ -147,29 +156,66 @@ jobs:
           RUST_TEST_THREADS: "1"
         run: scripts/ci/report.sh cargo test -p cordial-core --test live_model -- --ignored --nocapture
 
-  draft-release:
-    name: Create draft release from verified bundles
-    if: github.ref_type == 'branch' && contains(github.event.head_commit.message, '[release]')
-    needs: [build, smoke]
+  publish-release:
+    name: Publish verified preview installers
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch'
+    needs: [build, validation, smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: cordial-*
           path: bundles
-      - name: Create draft prerelease
+      - name: Create and publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: v0.1.0-preview-${{ github.run_number }}
+          PREVIEW_NUMBER: ${{ inputs.preview_number }}
           RELEASE_COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' files < <(find bundles -type f -print0)
-          test "${#files[@]}" -gt 0
-          gh release create "$RELEASE_TAG" "${files[@]}" --target "$RELEASE_COMMIT" --draft --prerelease \
-            --title "Cordial preview ${{ github.run_number }}" \
-            --notes "Preview installers built by GitHub Actions. Not signed or notarized. Test on each target device before publishing."
+          [[ "$PREVIEW_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          RELEASE_TAG="v0.1.0-preview-$PREVIEW_NUMBER"
+          NOTES_FILE="docs/releases/preview-$PREVIEW_NUMBER.md"
+          test -f "$NOTES_FILE"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+          if test -n "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"; then
+            echo "Tag $RELEASE_TAG already exists; refusing to replace it." >&2
+            exit 1
+          fi
+
+          mapfile -d '' files < <(find bundles -type f -print0 | sort -z)
+          # Two DMGs, two MSI/NSIS pairs, and two DEB/AppImage pairs.
+          test "${#files[@]}" -eq 10
+          for platform in macos-arm64 macos-x64 windows-x64 windows-arm64 linux-x64 linux-arm64; do
+            test -d "bundles/cordial-$platform"
+          done
+          for file in "${files[@]}"; do
+            case "$file" in
+              *.dmg|*.msi|*.exe|*.deb|*.AppImage) ;;
+              *) echo "Unexpected release asset: $file" >&2; exit 1 ;;
+            esac
+          done
+          mapfile -d '' unique_names < <(find bundles -type f -printf '%f\0' | sort -zu)
+          test "${#unique_names[@]}" -eq "${#files[@]}"
+
+          mkdir release-assets
+          cp -- "${files[@]}" release-assets/
+          (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
+          {
+            cat "$NOTES_FILE"
+            printf '\n---\nBuilt from commit `%s`. [Build and verification run](%s).\n' "$RELEASE_COMMIT" "$RUN_URL"
+          } > release-notes.md
+          gh release create "$RELEASE_TAG" release-assets/* SHA256SUMS.txt \
+            --target "$RELEASE_COMMIT" --prerelease --latest=false \
+            --title "Preview Release $PREVIEW_NUMBER" --notes-file release-notes.md
+          gh release view "$RELEASE_TAG" --json tagName,name,isDraft,isPrerelease,assets \
+            --jq '{tag: .tagName, name: .name, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'
