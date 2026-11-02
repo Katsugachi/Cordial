@@ -158,7 +158,9 @@ jobs:
 
   publish-release:
     name: Publish verified preview installers
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'branch') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v0.1.0-preview-'))
     needs: [build, validation, smoke]
     runs-on: ubuntu-latest
     permissions:
@@ -173,12 +175,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PREVIEW_NUMBER: ${{ inputs.preview_number }}
+          PREVIEW_NUMBER: ${{ inputs.preview_number || github.ref_name }}
+          RELEASE_TAG_INPUT: ${{ github.ref_name }}
           RELEASE_COMMIT: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$PREVIEW_NUMBER" == v0.1.0-preview-* ]]; then
+            PREVIEW_NUMBER="${PREVIEW_NUMBER#v0.1.0-preview-}"
+          fi
           [[ "$PREVIEW_NUMBER" =~ ^[1-9][0-9]*$ ]]
           RELEASE_TAG="v0.1.0-preview-$PREVIEW_NUMBER"
           NOTES_FILE="docs/releases/preview-$PREVIEW_NUMBER.md"
@@ -187,9 +193,14 @@ jobs:
             echo "Release $RELEASE_TAG already exists; refusing to overwrite it." >&2
             exit 1
           fi
-          if test -n "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"; then
-            echo "Tag $RELEASE_TAG already exists; refusing to replace it." >&2
-            exit 1
+          tag_args=(--target "$RELEASE_COMMIT")
+          remote_tag="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
+          if test -n "$remote_tag" || [[ "$RELEASE_TAG_INPUT" == "$RELEASE_TAG" ]]; then
+            # A version-tag run publishes the exact tag that triggered it.
+            test "$RELEASE_TAG_INPUT" = "$RELEASE_TAG"
+            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+            tag_args=(--verify-tag)
           fi
 
           mapfile -d '' files < <(find bundles -type f -print0 | sort -z)
@@ -215,7 +226,7 @@ jobs:
             printf '\n---\nBuilt from commit `%s`. [Build and verification run](%s).\n' "$RELEASE_COMMIT" "$RUN_URL"
           } > release-notes.md
           gh release create "$RELEASE_TAG" release-assets/* SHA256SUMS.txt \
-            --target "$RELEASE_COMMIT" --prerelease --latest=false \
+            "${tag_args[@]}" --prerelease --latest=false \
             --title "Preview Release $PREVIEW_NUMBER" --notes-file release-notes.md
           gh release view "$RELEASE_TAG" --json tagName,name,isDraft,isPrerelease,assets \
             --jq '{tag: .tagName, name: .name, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'
