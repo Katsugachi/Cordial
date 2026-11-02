@@ -501,16 +501,16 @@ mod tests {
     #[tokio::test]
     async fn cancelled_turn_future_releases_the_lock() {
         let busy = AtomicBool::new(false);
-        let future = async {
+        let mut future = Box::pin(async {
             let _guard = TurnGuard::acquire(&busy).expect("turn acquires the lock");
             std::future::pending::<()>().await;
-        };
-        tokio::pin!(future);
+        });
         tokio::select! {
             biased;
             _ = &mut future => unreachable!("pending future cannot finish"),
             _ = tokio::task::yield_now() => {}
         }
+        assert!(busy.load(Ordering::SeqCst));
         drop(future);
         assert!(!busy.load(Ordering::SeqCst));
         assert!(TurnGuard::acquire(&busy).is_some());
