@@ -107,6 +107,18 @@ describe("chat view", () => {
     expect(html).toContain("bom.gov.au");
   });
 
+  it("does not label an unfinished tool as Running after the turn ends", () => {
+    const assistant: Message = {
+      id: "a1", role: "assistant", content: "", thinking: null, attachments: [], created_at: 1,
+      tool_calls: [{ id: "c1", name: "read_page", arguments: [{ name: "url", value: "https://github.com/Katsugachi" }] }],
+    };
+    const state = { ...initialState(), session: sessionWith([userMessage, assistant]), busy: false };
+    const html = chatHtml(state);
+    expect(html).toContain('data-status="interrupted"');
+    expect(html).toContain("Interrupted");
+    expect(html).not.toContain('data-status="running"');
+  });
+
   it("shows the approval banner with both choices", () => {
     const state = {
       ...initialState(),

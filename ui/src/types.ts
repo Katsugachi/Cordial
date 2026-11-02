@@ -90,6 +90,7 @@ export interface Bootstrap {
   sessions: SessionSummary[];
   workspace_dir: string;
   app: AppInfo;
+  busy: boolean;
 }
 
 export type StopReason =

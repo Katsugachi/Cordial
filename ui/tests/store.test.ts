@@ -169,10 +169,35 @@ describe("model lifecycle", () => {
     expect(state.downloadError).toBe("network down");
   });
 
-  it("surfaces errors", () => {
-    const state = applyEvent(started(), { type: "error", message: "boom", turn_id: turnId });
+  it("surfaces errors without unlocking the turn before it finishes", () => {
+    let state = applyEvent(started(), { type: "error", message: "boom", turn_id: turnId });
     expect(state.error).toBe("boom");
+    expect(state.busy).toBe(true);
+    state = applyEvent(state, {
+      type: "turn_finished", turn_id: turnId, stop: "failed",
+      rounds: 0, prompt_tokens: 0, output_tokens: 0, tokens_per_second: 0,
+    });
     expect(state.busy).toBe(false);
+  });
+
+  it("ignores late errors and completions from an older turn", () => {
+    const state = started();
+    const staleError = applyEvent(state, { type: "error", message: "old failure", turn_id: "old-turn" });
+    expect(staleError).toBe(state);
+    const staleFinish = applyEvent(state, {
+      type: "turn_finished", turn_id: "old-turn", stop: "answered",
+      rounds: 1, prompt_tokens: 1, output_tokens: 1, tokens_per_second: 1,
+    });
+    expect(staleFinish).toBe(state);
+    expect(staleFinish.busy).toBe(true);
+    expect(staleFinish.turn?.id).toBe(turnId);
+  });
+
+  it("keeps an active turn locked when an unrelated model error arrives", () => {
+    const state = applyEvent(started(), { type: "error", message: "model warning", turn_id: null });
+    expect(state.error).toBe("model warning");
+    expect(state.busy).toBe(true);
+    expect(state.turn?.id).toBe(turnId);
   });
 });
 

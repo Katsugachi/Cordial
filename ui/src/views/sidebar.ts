@@ -18,10 +18,10 @@ export function sidebarHtml(state: AppState): string {
     <div class="sidebar__actions"><button class="new-chat" data-action="new-session" ${state.busy ? "disabled" : ""}>${icons.plus(14)} New chat</button></div>
     <div class="sidebar__label">Chats</div>
     <ul class="session-list">${rows || `<li class="sidebar__empty">No chats yet.</li>`}</ul>
-    <div class="sidebar__footer sidebar__tools">
-      <button class="ghost-button" data-action="open-memory" ${state.busy ? "disabled" : ""}>Memory</button>
-      <button class="ghost-button" data-action="open-skill" ${state.busy ? "disabled" : ""}>Skills</button>
-      <button class="ghost-button" data-action="remove-model" ${state.busy ? "disabled" : ""}>Remove downloaded model</button>
-    </div>
-  </aside>`;
+  </aside>
+  <div class="sidebar__footer sidebar__tools">
+    <button class="ghost-button" data-action="open-memory" ${state.busy ? "disabled" : ""}>Memory</button>
+    <button class="ghost-button" data-action="open-skill" ${state.busy ? "disabled" : ""}>Skills</button>
+    <button class="ghost-button" data-action="remove-model" ${state.busy ? "disabled" : ""}>Remove downloaded model</button>
+  </div>`;
 }

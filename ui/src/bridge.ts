@@ -180,6 +180,7 @@ class DemoBridge implements Bridge {
       sessions: this.sessions.map((session) => this.summary(session)),
       workspace_dir: "/Users/you/Library/Application Support/Cordial/workspace",
       app: { version: "0.1.0-demo", llama_version: "b12020 (demo)", llama_tag: "b12020", backend: "metal" },
+      busy: this.activeTurn !== null,
     };
   }
 

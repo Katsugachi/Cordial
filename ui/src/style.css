@@ -94,6 +94,9 @@ svg {
 .app {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* One shared bottom row keeps both dividers on exactly the same line,
+     including when the composer grows for a draft or attachments. */
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
   overflow: hidden;
 }
@@ -102,6 +105,7 @@ svg {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--paper);
 }
@@ -111,7 +115,6 @@ svg {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  height: 100vh;
 }
 
 /* --------------------------------------------------------------- sidebar */
@@ -259,7 +262,10 @@ svg {
 }
 
 .sidebar__footer {
+  grid-column: 1;
+  grid-row: 2;
   border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   padding: 10px 12px 12px;
 }
 
@@ -650,7 +656,8 @@ svg {
   background: var(--coral);
 }
 
-.tool-card[data-status="denied"] {
+.tool-card[data-status="denied"],
+.tool-card[data-status="interrupted"] {
   background: var(--paper);
   border: 1px solid var(--rule-strong);
 }
@@ -770,6 +777,9 @@ svg {
 /* ---------------------------------------------------------------- composer */
 
 .composer {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
   border-top: 1px solid var(--line);
   padding: 14px 24px 16px;
 }
@@ -1260,14 +1270,29 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
+  .sidebar,
+  .sidebar__footer {
     display: none;
+  }
+
+  .main,
+  .composer {
+    grid-column: 1;
   }
 }
 
 @media (max-width: 520px) {
   .topbar__controls .segmented__label {
     display: none;
+  }
+
+  .composer__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .composer__select {
+    min-width: 0;
+    flex: 1 1 72px;
   }
 
   .bubble-user {

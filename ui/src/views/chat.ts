@@ -9,6 +9,7 @@ const STATUS_LABEL: Record<ToolView["status"], string> = {
   awaiting: "Waiting for you",
   done: "Done",
   denied: "Declined",
+  interrupted: "Interrupted",
 };
 
 export function toolCard(tool: ToolView): string {
@@ -108,7 +109,7 @@ function toolsForCall(state: AppState, message: Message): ToolView[] {
       name: call.name,
       preview: call.arguments.map((argument) => `${argument.name}=${argument.value}`).join(", "),
       risk: "",
-      status: result ? (denied ? "denied" : "done") : "running",
+      status: result ? (denied ? "denied" : "done") : state.busy ? "running" : "interrupted",
       summary: result ? excerpt(result.content, 160) : "",
       detail: result ? result.content : "",
       thumbnail: null,

@@ -26,6 +26,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
   let attachments: Attachment[] = [];
   let rendered = false;
   let sending = false;
+  let turnEventDuringBoot = false;
 
   const dialogHost = document.createElement("div");
   document.body.append(dialogHost);
@@ -46,8 +47,8 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       <main class="main">
         ${topbarHtml()}
         ${chatHtml(state)}
-        ${composerHtml(state, attachments)}
       </main>
+      ${composerHtml(state, attachments)}
     </div>`;
   }
 
@@ -186,6 +187,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
   }
 
   function handle(event: AgentEvent): void {
+    if (event.type === "turn_started" || event.type === "turn_finished") turnEventDuringBoot = true;
     state = applyEvent(state, event);
     // The backend persists the transcript after emitting turn_finished. Do not
     // accept a second turn or switch chats until that command has settled.
@@ -208,8 +210,15 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
     render();
 
     if (event.type === "turn_finished" || event.type === "assistant_message") {
-      void refreshSessions().then(() => {
-        if (event.type === "turn_finished") render();
+      void refreshSessions().then(async () => {
+        if (event.type !== "turn_finished") return;
+        // A reloaded window has no owning send command to reload the saved
+        // transcript, so do it here when the recovered turn finishes.
+        if (!sending && state.session) {
+          try { state.session = await bridge.loadSession(state.session.id); }
+          catch { /* Keep the visible transcript if reload fails. */ }
+        }
+        render();
       });
     }
   }
@@ -280,8 +289,10 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       }
     } finally {
       sending = false;
-      state.busy = false;
-      state.turn = null;
+      // A rejected duplicate send must not unlock the turn that is still
+      // running. Only the owning command may clear an active turn.
+      if (state.turn) state.busy = true;
+      else state.busy = false;
       render();
     }
   }
@@ -530,6 +541,9 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       state.app = data.app;
       state.workspace = data.workspace_dir;
       state.sessions = sortSessions(data.sessions);
+      // A window can reload while the native harness is still answering.
+      // Live events are newer than this snapshot, so never overwrite them.
+      if (data.busy && !turnEventDuringBoot) state.busy = true;
       state.phase = bridge.demo
         ? "demo"
         : data.model.status === "ready"

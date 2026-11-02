@@ -22,7 +22,7 @@ export interface ToolView {
   name: string;
   preview: string;
   risk: string;
-  status: "running" | "awaiting" | "done" | "denied";
+  status: "running" | "awaiting" | "done" | "denied" | "interrupted";
   summary: string;
   detail: string;
   thumbnail: string | null;
@@ -278,6 +278,9 @@ export function applyEvent(state: AppState, event: AgentEvent): AppState {
     }
 
     case "turn_finished":
+      // Events and command replies travel independently. A late completion
+      // from an older turn must not unlock a newer one.
+      if (state.turn && state.turn.id !== event.turn_id) return state;
       return {
         ...state,
         turn: null,
@@ -286,8 +289,19 @@ export function applyEvent(state: AppState, event: AgentEvent): AppState {
         notice: stopNotice(event.stop) ?? state.notice,
       };
 
-    case "error":
-      return { ...state, error: event.message, busy: false, turn: null, approval: null };
+    case "error": {
+      if (event.turn_id && state.turn && state.turn.id !== event.turn_id) return state;
+      // An error is not the end-of-turn signal. Keep Stop available until
+      // turn_finished and the command's transcript save have both settled.
+      const active = state.busy;
+      return {
+        ...state,
+        error: event.message,
+        busy: active,
+        turn: active ? state.turn : null,
+        approval: active ? state.approval : null,
+      };
+    }
 
     case "notice":
       return { ...state, notice: event.message };

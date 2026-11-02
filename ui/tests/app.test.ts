@@ -297,6 +297,74 @@ describe("window", () => {
     }
   });
 
+  it("keeps Stop available after a mid-turn error until the command settles", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const root = document.getElementById("app")!;
+    const bridge = createBridge();
+    let emit!: (event: AgentEvent) => void;
+    let finish!: () => void;
+    bridge.onEvent = async handler => { emit = handler; return () => {}; };
+    bridge.sendMessage = () => new Promise<void>(resolve => { finish = resolve; });
+    mount(root, bridge);
+    await vi.advanceTimersByTimeAsync(20);
+    root.querySelector<HTMLTextAreaElement>("#input")!.value = "Keep working";
+    root.querySelector<HTMLElement>('[data-action="send"]')!.click();
+    emit({ type: "turn_started", turn_id: "t", session_id: "demo-session" });
+    emit({ type: "error", turn_id: "t", message: "Temporary failure" });
+    expect(root.querySelector('[data-action="stop"]')).not.toBeNull();
+    expect(root.querySelector('[data-action="send"]')).toBeNull();
+    emit({ type: "turn_finished", turn_id: "t", stop: "failed", rounds: 0, prompt_tokens: 0, output_tokens: 0, tokens_per_second: 0 });
+    expect(root.querySelector('[data-action="stop"]')).not.toBeNull();
+    finish();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root.querySelector('[data-action="send"]')).not.toBeNull();
+  });
+
+  it("does not unlock an active turn when a send command is rejected", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const root = document.getElementById("app")!;
+    const bridge = createBridge();
+    let emit!: (event: AgentEvent) => void;
+    bridge.onEvent = async handler => { emit = handler; return () => {}; };
+    bridge.sendMessage = async () => {
+      emit({ type: "turn_started", turn_id: "t", session_id: "demo-session" });
+      throw new Error("Cordial is still answering the previous message.");
+    };
+    mount(root, bridge);
+    await vi.advanceTimersByTimeAsync(20);
+    root.querySelector<HTMLTextAreaElement>("#input")!.value = "Duplicate";
+    root.querySelector<HTMLElement>('[data-action="send"]')!.click();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root.querySelector('[data-action="stop"]')).not.toBeNull();
+    expect(root.querySelector('[data-action="send"]')).toBeNull();
+    emit({ type: "turn_finished", turn_id: "t", stop: "answered", rounds: 1, prompt_tokens: 1, output_tokens: 1, tokens_per_second: 1 });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root.querySelector('[data-action="send"]')).not.toBeNull();
+  });
+
+  it("restores a busy harness after reload and unlocks when it finishes", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+    const root = document.getElementById("app")!;
+    const bridge = createBridge();
+    const bootstrap = bridge.bootstrap.bind(bridge);
+    const load = bridge.loadSession.bind(bridge);
+    let emit!: (event: AgentEvent) => void;
+    bridge.onEvent = async handler => { emit = handler; return () => {}; };
+    bridge.bootstrap = async () => ({ ...(await bootstrap()), busy: true });
+    bridge.loadSession = async id => {
+      const session = await load(id);
+      session.messages.push({ id: "recovered", role: "assistant", content: "Recovered answer", tool_calls: [], attachments: [], created_at: Date.now() });
+      return session;
+    };
+    mount(root, bridge);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root.querySelector('[data-action="stop"]')).not.toBeNull();
+    emit({ type: "turn_finished", turn_id: "recovered-turn", stop: "answered", rounds: 1, prompt_tokens: 1, output_tokens: 1, tokens_per_second: 1 });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(root.querySelector('[data-action="send"]')).not.toBeNull();
+    expect(root.textContent).toContain("Recovered answer");
+  });
+
   it("creates a new chat from the sidebar", async () => {
     const root = await bootApp();
     root.querySelector<HTMLElement>('[data-action="new-session"]')?.click();

@@ -34,10 +34,15 @@ pub struct Bootstrap {
     pub sessions: Vec<SessionSummary>,
     pub workspace_dir: String,
     pub app: AppInfo,
+    /// Lets a reloaded window keep Send locked while a turn is still running.
+    pub busy: bool,
 }
 
 #[tauri::command]
 pub async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> {
+    // Snapshot before waiting on Core: a turn may finish while this command
+    // waits. The UI reconciles this snapshot with any live events it received.
+    let busy = state.busy.load(std::sync::atomic::Ordering::SeqCst);
     let (settings, model, workspace_dir) = state.summary().await;
     let sessions = {
         let guard = state.core.lock().await;
@@ -49,6 +54,7 @@ pub async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, String> 
         sessions,
         workspace_dir,
         app: app_info(),
+        busy,
     })
 }
 

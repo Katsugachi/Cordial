@@ -74,8 +74,8 @@ jobs:
           node-version: 22
       - name: Build the frontend
         run: npm --prefix ui ci && npm --prefix ui run build
-      - name: Compile the desktop shell
-        run: scripts/ci/report.sh cargo check -p cordial-app
+      - name: Test the desktop shell
+        run: scripts/ci/report.sh cargo test -p cordial-app
 
   ui:
     name: UI (typecheck, tests, build)

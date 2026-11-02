@@ -29,6 +29,27 @@ pub struct Engine {
     pub info: EngineInfo,
 }
 
+/// Releases the turn lock on every exit, including a cancelled command future.
+struct TurnGuard<'a> {
+    busy: &'a AtomicBool,
+}
+
+impl<'a> TurnGuard<'a> {
+    fn acquire(busy: &'a AtomicBool) -> Option<Self> {
+        if busy.swap(true, Ordering::SeqCst) {
+            None
+        } else {
+            Some(Self { busy })
+        }
+    }
+}
+
+impl Drop for TurnGuard<'_> {
+    fn drop(&mut self) {
+        self.busy.store(false, Ordering::SeqCst);
+    }
+}
+
 pub struct Core {
     pub paths: Paths,
     pub settings: Settings,
@@ -199,13 +220,11 @@ impl AppState {
         text: String,
         attachments: Vec<Attachment>,
     ) -> Result<(), String> {
-        if self.busy.swap(true, Ordering::SeqCst) {
+        let Some(_guard) = TurnGuard::acquire(&self.busy) else {
             return Err("Cordial is still answering the previous message.".to_string());
-        }
+        };
         self.cancel.store(false, Ordering::Relaxed);
-        let outcome = self.run_turn_inner(session_id, text, attachments).await;
-        self.busy.store(false, Ordering::SeqCst);
-        outcome
+        self.run_turn_inner(session_id, text, attachments).await
     }
 
     async fn run_turn_inner(
@@ -463,4 +482,37 @@ pub fn write_settings(paths: &Paths, settings: &Settings) -> Result<(), CoreErro
     std::fs::write(&tmp, json)?;
     std::fs::rename(&tmp, &file)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn turn_guard_admits_one_owner_and_releases_on_drop() {
+        let busy = AtomicBool::new(false);
+        let guard = TurnGuard::acquire(&busy).expect("first turn acquires the lock");
+        assert!(TurnGuard::acquire(&busy).is_none());
+        drop(guard);
+        assert!(!busy.load(Ordering::SeqCst));
+        assert!(TurnGuard::acquire(&busy).is_some());
+    }
+
+    #[tokio::test]
+    async fn cancelled_turn_future_releases_the_lock() {
+        let busy = AtomicBool::new(false);
+        let future = async {
+            let _guard = TurnGuard::acquire(&busy).expect("turn acquires the lock");
+            std::future::pending::<()>().await;
+        };
+        tokio::pin!(future);
+        tokio::select! {
+            biased;
+            _ = &mut future => unreachable!("pending future cannot finish"),
+            _ = tokio::task::yield_now() => {}
+        }
+        drop(future);
+        assert!(!busy.load(Ordering::SeqCst));
+        assert!(TurnGuard::acquire(&busy).is_some());
+    }
 }
