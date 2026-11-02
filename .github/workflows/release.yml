@@ -99,80 +99,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix ui ci
 
-      - name: Import Apple signing credentials (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          set -euo pipefail
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_P8; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing GitHub secret: $name. See docs/macOS-signing.md." >&2
-              exit 1
-            fi
-          done
-          KEYCHAIN="$RUNNER_TEMP/cordial-signing.keychain-db"
-          CERTIFICATE="$RUNNER_TEMP/cordial-signing.p12"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
-          echo "CORDIAL_SIGNING_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
-          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A > "$CERTIFICATE"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -t 3600 -u "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$CERTIFICATE" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
-          if [[ -z "$IDENTITY" ]]; then
-            echo "The imported certificate is not a Developer ID Application certificate." >&2
-            exit 1
-          fi
-          API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
-          printf '%s' "$APPLE_API_KEY_P8" > "$API_KEY_PATH"
-          chmod 600 "$API_KEY_PATH"
-          rm -f "$CERTIFICATE"
-          {
-            echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
-            echo "APPLE_API_KEY_PATH=$API_KEY_PATH"
-          } >> "$GITHUB_ENV"
-          echo "Imported Developer ID Application certificate for ${IDENTITY##* }."
-
       - name: Build and bundle
         shell: bash
         env:
           CORDIAL_PORTABLE_CPU: "1"
           CORDIAL_GGML_OPENCL: ${{ matrix.opencl }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           scripts/ci/report.sh bash -c 'cd crates/cordial-app && ../../ui/node_modules/.bin/tauri build ${{ matrix.args }}'
-
-      - name: Verify macOS signature and notarization
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="$(find crates/cordial-app/target target -path '*/release/bundle/macos/*.app' -print -quit 2>/dev/null || true)"
-          DMG="$(find crates/cordial-app/target target -path '*/release/bundle/dmg/*.dmg' -print -quit 2>/dev/null || true)"
-          test -n "$APP" && test -n "$DMG"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          xcrun stapler validate "$APP"
-          xcrun stapler validate "$DMG"
-          spctl --assess --type execute --verbose=4 "$APP"
-
-      - name: Remove Apple signing credentials (macOS)
-        if: always() && runner.os == 'macOS'
-        shell: bash
-        run: |
-          if [[ -n "${CORDIAL_SIGNING_KEYCHAIN:-}" ]]; then
-            security delete-keychain "$CORDIAL_SIGNING_KEYCHAIN" || true
-          fi
-          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cordial-signing.p12"
 
       - name: Collect bundles
         uses: actions/upload-artifact@v4
