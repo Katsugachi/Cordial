@@ -16,7 +16,7 @@ Web fetch, navigation and search are still heavily handicapped on restricted net
 
 ## What it does
 
-- **Answers with sources.** The system prompt pushes the model to search before it
+- **Answers with sources. (most of the time)** The system prompt pushes the model to search before it
   states a fact, to open the best result, and to cite links inline.
 - **Uses tools honestly.** `web_search`, `web_fetch`, and a real browser driven
   over the Chrome DevTools Protocol (`browser_open`, `browser_click`,
