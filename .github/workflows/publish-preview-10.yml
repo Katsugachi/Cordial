@@ -1,0 +1,75 @@
+# One-time publication of the already verified Preview Release 10 artifacts.
+# Remove this recovery workflow after the release is published.
+name: Publish Preview Release 10
+
+on:
+  push:
+    branches: ["arena/3647b8d4-cordial"]
+    paths: [".github/workflows/publish-preview-10.yml"]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-preview-10
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN_ID: "41388394400"
+      SOURCE_COMMIT: e3fd44cf892ad0dcec49d45598857382d5904c86
+      RELEASE_TAG: v0.1.0-preview-10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify the source run and tag
+        run: |
+          set -euo pipefail
+          gh run view "$SOURCE_RUN_ID" --json headSha,headBranch,event,jobs > source-run.json
+          jq -e --arg sha "$SOURCE_COMMIT" --arg tag "$RELEASE_TAG" '
+            .headSha == $sha and .headBranch == $tag and .event == "push" and
+            ([.jobs[] | select(.name != "Publish verified preview installers")] | length == 8) and
+            all(.jobs[] | select(.name != "Publish verified preview installers"); .conclusion == "success")
+          ' source-run.json
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$SOURCE_COMMIT"
+          remote_commit="$(git ls-remote origin "refs/tags/$RELEASE_TAG^{}" | awk '{print $1}')"
+          test "$remote_commit" = "$SOURCE_COMMIT"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite." >&2
+            exit 1
+          fi
+      - name: Download verified installers
+        run: |
+          set -euo pipefail
+          gh run download "$SOURCE_RUN_ID" --pattern 'cordial-*' --dir bundles
+          find bundles -type f -printf '%P\t%s bytes\n' | sort | tee asset-manifest.txt
+          cat asset-manifest.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish prerelease
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::Publication failed at line $LINENO"' ERR
+          mapfile -d '' files < <(find bundles -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' \) -print0 | sort -z)
+          printf 'Installer count: %s\n' "${#files[@]}"
+          test "${#files[@]}" -eq 10
+          for platform in macos-arm64 macos-x64 windows-x64 windows-arm64 linux-x64 linux-arm64; do
+            test -d "bundles/cordial-$platform"
+          done
+          mapfile -d '' unique_names < <(find bundles -type f -printf '%f\0' | sort -zu)
+          test "${#unique_names[@]}" -eq "${#files[@]}"
+          mkdir release-assets
+          cp -- "${files[@]}" release-assets/
+          (cd release-assets && sha256sum -- * > ../SHA256SUMS.txt)
+          git show "$SOURCE_COMMIT:docs/releases/preview-10.md" > release-notes.md
+          printf '\n---\nBuilt from commit `%s`. [Successful build and verification jobs](https://github.com/%s/actions/runs/%s).\n' "$SOURCE_COMMIT" "$GH_REPO" "$SOURCE_RUN_ID" >> release-notes.md
+          gh release create "$RELEASE_TAG" release-assets/* SHA256SUMS.txt \
+            --verify-tag --prerelease --latest=false \
+            --title "Preview Release 10" --notes-file release-notes.md
+          gh release view "$RELEASE_TAG" --json tagName,name,isDraft,isPrerelease,assets \
+            --jq '{tag: .tagName, name: .name, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'
