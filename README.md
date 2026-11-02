@@ -122,7 +122,7 @@ npm --prefix ui run test               # UI reducer, renderer, window integratio
 cargo test -p cordial-core --test live_model -- --ignored --nocapture
 ```
 
-The harness tests drive the real agent loop with a scripted model: tool-call round
+The harness tests drive the agent loop with a scripted model: tool-call round
 trips, approvals, denials, effort exhaustion, context-overflow trimming and
 cancellation all run deterministically in milliseconds.
 
@@ -132,8 +132,7 @@ web is off, brevity, absence of filler, and recognising the colour of an attache
 image. It is the suite to run after changing the system prompt or sampler.
 
 Each live run publishes what the model actually said to
-[`docs/live-report.md`](docs/live-report.md), so prompt quality can be reviewed
-without a local GPU or a 1.3 GB download.
+[`docs/live-report.md`](docs/live-report.md), so prompt quality can be reviewed.
 Cordial is MIT licensed ([`LICENSE`](LICENSE)). LFM3-VL-2B weights are released
 by Liquid AI under the [LFM Open License v1.0](https://huggingface.co/LiquidAI/LICENSE);
 llama.cpp is MIT. Cordial downloads weights at runtime and does not redistribute
