@@ -45,6 +45,10 @@ Download the installer for your platform from the releases page:
 | Windows 11 arm64 | `.msi` | **OpenCL**, CPU fallback |
 | Linux x64 / arm64 | `.deb` / `.AppImage` | CPU |
 
+macOS previews are ad-hoc signed and not notarized. If macOS blocks the app,
+see [Opening the free macOS preview](docs/macOS-preview.md) before using any
+quarantine-removal command.
+
 On first launch Cordial downloads the model into your app-data folder:
 
 | OS | Location |
