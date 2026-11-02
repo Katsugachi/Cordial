@@ -2,10 +2,7 @@
 
 # Cordial
 
-A private agent that runs on your machine. It answers questions, checks facts on
-the web, drives a browser, reads your files, and looks at images, powered by
-[LFM3-VL-2B](https://huggingface.co/LiquidAI/LFM3-VL-2B) through
-[llama.cpp](https://github.com/ggml-org/llama.cpp)
+A lightweight, ultra-fast local AI agent and private desktop assistant. Runs LFM3-VL-2B via llama.cpp with native browser automation
 
 Cordial is a desktop app: a thin Rust/Tauri shell around a local agentic harness.
 On first launch it downloads the Q4_K_M weights (1.1 GB) + the vision
