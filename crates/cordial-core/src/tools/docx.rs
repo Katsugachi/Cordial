@@ -243,6 +243,13 @@ fn parse_paragraphs(xml: &str) -> Result<Vec<String>, String> {
                     current.push_str(&decoded);
                 }
             }
+            Ok(Event::GeneralRef(reference)) => {
+                if let Some(current) = current.as_mut() {
+                    let entity = format!("&{};", reference.as_ref());
+                    let decoded = unescape(&entity).map_err(|err| err.to_string())?;
+                    current.push_str(&decoded);
+                }
+            }
             Ok(Event::End(end)) => {
                 if end.local_name().as_ref() == "p" {
                     if let Some(text) = current.take() {
