@@ -120,6 +120,9 @@ npm --prefix ui run dev     # http://localhost:1420
 
 ## Tests
 
+Linux x64 CI runs on Instabox. See [CI setup and runner placement](docs/CI.md)
+for the GitHub App connection, fork-PR safeguards, and native release builders.
+
 ```bash
 cargo test --workspace                 # harness + prompt + tools (no model needed)
 npm --prefix ui run test               # UI reducer, renderer, window integration

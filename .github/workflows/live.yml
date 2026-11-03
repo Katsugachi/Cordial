@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: "0 3 * * 1"
 
+# Scheduled runs use the default branch; dispatch requires repository write access.
+permissions:
+  contents: write
+
 concurrency:
   group: live-model
   cancel-in-progress: false
@@ -15,7 +19,7 @@ concurrency:
 jobs:
   behaviour:
     name: Prompts against LFM3-VL-2B
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     timeout-minutes: 120
     env:
       CARGO_INCREMENTAL: "0"

@@ -11,6 +11,12 @@ on:
         type: boolean
         default: false
 
+# Instabox supplies a fresh Ubuntu 24.04 x64 VM per job. Never execute a
+# fork PR on it: only repository pushes, trusted dispatches, and same-repository
+# PRs are eligible. Review fork changes before pushing a trusted test branch.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: never
   CARGO_INCREMENTAL: "0"
@@ -27,14 +33,15 @@ jobs:
   # not blocked by whitespace.
 
   rust:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Rust (clippy, tests)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     timeout-minutes: 120
     env:
-      # Standard private-repo runners have two cores; keep both cargo and the
-      # llama.cpp build from fighting over memory.
-      CARGO_BUILD_JOBS: "2"
-      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+      # instabox-medium has four cores and 8 GiB RAM. Bound both build systems
+      # explicitly rather than letting nested Cargo/CMake builds oversubscribe it.
+      CARGO_BUILD_JOBS: "4"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -50,12 +57,13 @@ jobs:
         run: scripts/ci/report.sh cargo test --workspace --exclude cordial-app --all-targets
 
   app:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Desktop shell (compile check)
-    runs-on: ubuntu-22.04
+    runs-on: instabox-medium
     timeout-minutes: 120
     env:
-      CARGO_BUILD_JOBS: "2"
-      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+      CARGO_BUILD_JOBS: "4"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
     steps:
       - uses: actions/checkout@v4
       - name: Tauri system libraries
@@ -78,8 +86,9 @@ jobs:
         run: scripts/ci/report.sh cargo test -p cordial-app
 
   ui:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: UI (typecheck, tests, build)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -96,8 +105,9 @@ jobs:
         run: scripts/ci/report.sh npm --prefix ui run build
 
   inference-stack:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Inference stack (llama.cpp + model reachability)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +130,7 @@ jobs:
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_COMMON=OFF \
             -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_MTMD=ON -DBUILD_SHARED_LIBS=OFF
-          cmake --build /tmp/llama-build --config Release --parallel
+          cmake --build /tmp/llama-build --config Release --parallel 4
       - name: Verify static libraries exist
         run: |
           find /tmp/llama-build -name "libmtmd.a" -o -name "libllama.a" -o -name "libggml-base.a" | sort
@@ -134,8 +144,11 @@ jobs:
     # a manual dispatch with `live: true`, or a commit that asks for it with
     # `[live]` in the message (GitHub only lists workflows that exist on the
     # default branch, and dispatch needs actions:write).
-    if: (github.event_name == 'workflow_dispatch' && inputs.live) || contains(github.event.head_commit.message, '[live]')
-    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      ((github.event_name == 'workflow_dispatch' && inputs.live) ||
+      contains(github.event.head_commit.message, '[live]'))
+    runs-on: instabox-medium
     timeout-minutes: 120
     env:
       CORDIAL_PORTABLE_CPU: "1"

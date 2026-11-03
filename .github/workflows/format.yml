@@ -3,6 +3,7 @@ name: Format
 # Applies `cargo fmt` and commits the result. Contributors can just push; this
 # keeps the tree formatted without requiring a local rustfmt of the exact
 # toolchain version. Commits made with the workflow token do not re-trigger CI.
+# Push and dispatch events require repository write access; fork PRs never run here.
 on:
   push:
     branches-ignore: ["main"]
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   rustfmt:
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
