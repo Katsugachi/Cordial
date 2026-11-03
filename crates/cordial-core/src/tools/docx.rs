@@ -300,8 +300,9 @@ fn edit_docx(path: &Path, output: &Path, edits: &[Edit]) -> Result<usize, String
             return Err("DOCX expands beyond the 200 MB limit".to_string());
         }
     }
-    let file = std::fs::File::create(output).map_err(|err| err.to_string())?;
-    let mut writer = ZipWriter::new(file);
+    // Build the whole archive before touching the output. Never overwrite an
+    // existing document, including the source, even if approval was granted.
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     for name in names {
         let mut entry = archive.by_name(&name).map_err(|err| err.to_string())?;
@@ -331,7 +332,10 @@ fn edit_docx(path: &Path, output: &Path, edits: &[Edit]) -> Result<usize, String
             writer.write_all(&bytes).map_err(|err| err.to_string())?;
         }
     }
-    writer.finish().map_err(|err| err.to_string())?;
+    let bytes = writer.finish().map_err(|err| err.to_string())?.into_inner();
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(output).map_err(|err| err.to_string())?;
+    file.write_all(&bytes).map_err(|err| err.to_string())?;
     Ok(count)
 }
 
@@ -406,6 +410,7 @@ fn replace_paragraphs(xml: &str, edits: &[Edit]) -> Result<(String, usize), Stri
                         .map_err(|err| err.to_string())?;
                 }
             }
+            Event::GeneralRef(_) if in_text && in_target => {}
             other => {
                 writer
                     .write_event(other.into_owned())
@@ -423,8 +428,7 @@ fn create_docx(path: &Path, content: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    let file = std::fs::File::create(path).map_err(|err| err.to_string())?;
-    let mut writer = ZipWriter::new(file);
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     let mut document = String::from(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
@@ -454,7 +458,10 @@ fn create_docx(path: &Path, content: &str) -> Result<(), String> {
             .write_all(body.as_bytes())
             .map_err(|err| err.to_string())?;
     }
-    writer.finish().map_err(|err| err.to_string())?;
+    let bytes = writer.finish().map_err(|err| err.to_string())?.into_inner();
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
+        .open(path).map_err(|err| err.to_string())?;
+    file.write_all(&bytes).map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -491,6 +498,25 @@ mod tests {
         assert_eq!(count, 1);
         let paragraphs = parse_paragraphs(&updated).unwrap();
         assert_eq!(paragraphs, vec!["Question", "Answer <safe>"]);
+    }
+
+    #[test]
+    fn replacing_text_removes_old_entity_references() {
+        let xml = r#"<w:document xmlns:w="x"><w:body><w:p><w:r><w:t>Old &amp; text</w:t></w:r></w:p></w:body></w:document>"#;
+        let edits = vec![Edit { paragraph: 0, text: "New".into() }];
+        let (updated, _) = replace_paragraphs(xml, &edits).unwrap();
+        assert_eq!(parse_paragraphs(&updated).unwrap(), vec!["New"]);
+    }
+
+    #[test]
+    fn create_does_not_overwrite_existing_document() {
+        let dir = std::env::temp_dir().join(format!("cordial-docx-preserve-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test.docx");
+        std::fs::write(&path, b"original").unwrap();
+        assert!(create_docx(&path, "replacement").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"original");
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]

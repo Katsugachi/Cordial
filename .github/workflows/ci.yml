@@ -163,6 +163,20 @@ jobs:
         with:
           path: ${{ runner.temp }}/cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
+      - name: Generated task evaluation
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact generated_complex_tasks_verify_artifacts 2>&1 | tee /tmp/task-eval.log
+      - name: Upload task evaluation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-task-evaluation
+          path: /tmp/task-eval.log
+          if-no-files-found: ignore
       - name: Load check (one question)
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
