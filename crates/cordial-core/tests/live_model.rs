@@ -331,6 +331,18 @@ async fn generated_complex_tasks_verify_artifacts() {
         c - a,
         word_session.plan
     );
+    // Cross-check with a separate implementation using Python's standard ZIP/XML
+    // parser instead of trusting the application's own DOCX reader.
+    let verifier = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/ci/verify_task_artifacts.py");
+    let check = std::process::Command::new("python3")
+        .arg(verifier)
+        .arg(&live.workspace)
+        .args([a.to_string(), b.to_string(), c.to_string()])
+        .output()
+        .expect("independent artifact verification requires python3");
+    eprintln!("{}{}", String::from_utf8_lossy(&check.stdout), String::from_utf8_lossy(&check.stderr));
+    assert!(check.status.success(), "independent artifact verification failed");
     assert!(
         missing.is_empty(),
         "CSV artifact missing expected numbers: {missing:?}"

@@ -192,13 +192,24 @@ impl<'a> Agent<'a> {
         let mut repaired_tool_call = false;
         let mut retry_instruction = "";
         let mut plan_nudges = 0u32;
+        let mut planning_attempts = 0u32;
 
         let outcome = loop {
             if self.cancelled() {
                 break StopReason::Cancelled;
             }
 
-            let tools_for_prompt = tools::specs(self.config.web_enabled);
+            // Reserve a few initial generations for planning. Presenting only
+            // update_plan avoids burying it among unrelated tools for small
+            // models; after the retries, permit work but report an absent plan.
+            let planning = self.config.effort == Effort::Task
+                && session.plan.is_empty()
+                && planning_attempts < 3;
+            let mut tools_for_prompt = tools::specs(self.config.web_enabled);
+            if planning {
+                planning_attempts += 1;
+                tools_for_prompt.retain(|tool| tool.name == "update_plan");
+            }
             let output = match self
                 .generate_with_retry(
                     session,
@@ -244,6 +255,11 @@ impl<'a> Agent<'a> {
 
             let parsed = parse_reply(&output.text, thinking);
             retry_instruction = "";
+            if planning && !parsed.calls.iter().any(|call| call.name == "update_plan") {
+                self.events.emit(AgentEvent::GenerationReset { turn_id: turn_id.clone() });
+                retry_instruction = "First call update_plan with a JSON checklist. Example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet.";
+                continue;
+            }
             let ambiguous_search = self.config.web_enabled
                 && parsed.calls.is_empty()
                 && looks_like_search_arguments(&parsed.content, &original_user_text);

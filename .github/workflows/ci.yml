@@ -163,6 +163,8 @@ jobs:
         with:
           path: ${{ runner.temp }}/cordial-models
           key: lfm3-vl-2b-q4km-mmproj-q8
+      - name: Test independent artifact verifier
+        run: python3 scripts/ci/test_verify_task_artifacts.py
       - name: Generated task evaluation
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
