@@ -29,6 +29,11 @@ class VerifierTests(unittest.TestCase):
         self.docx('worksheet.docx', '46 and 26')
         self.assertEqual(len(verify(self.root, 17, 29, 43)), 5)
 
+    def test_rejects_answers_in_wrong_question_sections(self):
+        (self.root / 'totals.txt').write_text('Item A: 34\nItem B: 87\nItem C: 172\nGrand total: 293\n')
+        self.docx('done.docx', 'Question 1: Answer 26. Question 2: Answer 46.')
+        self.assertEqual(len(verify(self.root, 17, 29, 43)), 1)
+
     def test_rejects_substrings_and_invalid_docx(self):
         (self.root / 'totals.txt').write_text('Item A: 1340\nItem B: 870\nItem C: 1720\nGrand total: 2930')
         (self.root / 'broken.docx').write_text('not a zip')

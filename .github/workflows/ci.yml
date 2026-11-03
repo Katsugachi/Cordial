@@ -213,11 +213,13 @@ jobs:
                   printf '::notice::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
                 done
           fi
-          python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
+          if [ -f "$log" ]; then
+            python3 scripts/ci/live_report.py "$log" /tmp/live-report.md
+          fi
       - name: Upload live transcript
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: live-model-transcript
-          path: docs/live-report.md
+          path: /tmp/live-report.md
           if-no-files-found: ignore
