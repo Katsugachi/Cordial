@@ -619,7 +619,9 @@ impl<'a> Agent<'a> {
             system.push_str("\n\nBefore other tools, create a task-specific checklist. Example format: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>\n");
         }
         if !session.plan.is_empty() {
-            system.push_str("\n\nCurrent task checklist (update these same steps; do not restart the plan):\n");
+            system.push_str(
+                "\n\nCurrent task checklist (update these same steps; do not restart the plan):\n",
+            );
             for step in &session.plan {
                 system.push_str(&format!(
                     "{}. [{}] {}{}\n",
