@@ -185,3 +185,16 @@ describe("download screen", () => {
     expect(html).toContain("50%");
   });
 });
+
+describe("task checklist", () => {
+  it("renders progress and escapes untrusted step text", () => {
+    const session = { ...sessionWith([userMessage]), plan: [
+      { id: 0, title: "<script>bad</script>", status: "done" as const, note: "checked" },
+      { id: 1, title: "Next", status: "running" as const, note: "" },
+    ] };
+    const html = chatHtml({ ...initialState(), session });
+    expect(html).toContain("1/2");
+    expect(html).toContain("&lt;script&gt;bad&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+  });
+});

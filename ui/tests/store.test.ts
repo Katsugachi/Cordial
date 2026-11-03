@@ -222,3 +222,19 @@ describe("event typing", () => {
     expect(event.type).toBe("notice");
   });
 });
+
+describe("task checklist", () => {
+  it("accepts only the active turn's plan and keeps statuses", () => {
+    let state = started();
+    state = { ...state, session: { id: "s1", title: "t", created_at: 0, updated_at: 0, messages: [] } };
+    const steps = [
+      { id: 0, title: "Inspect", status: "done" as const, note: "Verified" },
+      { id: 1, title: "Write", status: "running" as const, note: "" },
+    ];
+    const stale = applyEvent(state, { type: "plan_updated", turn_id: "old", steps });
+    expect(stale.session?.plan).toBeUndefined();
+    const next = applyEvent(state, { type: "plan_updated", turn_id: turnId, steps });
+    expect(next.session?.plan).toEqual(steps);
+    expect(state.session?.plan).toBeUndefined();
+  });
+});

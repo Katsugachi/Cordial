@@ -189,10 +189,14 @@ pub fn specs(web_enabled: bool) -> Vec<ToolSpec> {
     });
     out.push(ToolSpec {
         name: "docx_read",
-        description: "Read a DOCX file as numbered paragraphs [p0], [p1], ...",
+        description: "Read numbered DOCX paragraphs. If the result gives a next start index, call again until all paragraphs are read.",
         parameters: json!({
             "type": "object",
-            "properties": { "path": string_param("DOCX path relative to the workspace") },
+            "properties": {
+                "path": string_param("DOCX path relative to the workspace"),
+                "start": { "type": "integer", "description": "First paragraph index, default 0" },
+                "count": { "type": "integer", "description": "Maximum paragraphs, default 100" }
+            },
             "required": ["path"]
         }),
         risk: Risk::Read,

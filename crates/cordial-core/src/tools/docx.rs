@@ -36,14 +36,31 @@ pub fn read(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     };
     match read_docx(&path) {
         Ok(paragraphs) => {
-            let mut text = String::new();
-            for (index, paragraph) in paragraphs.iter().enumerate() {
-                text.push_str(&format!("[p{index}] {paragraph}\n"));
+            let start = call.int("start").unwrap_or(0);
+            if start < 0 || start as usize > paragraphs.len() {
+                return ToolOutcome::fail("invalid start", "Error: start must be a valid paragraph index.");
             }
-            ToolOutcome::ok(
-                format!("read {} paragraphs", paragraphs.len()),
-                truncate_chars(&text, runtime.effort().fetch_chars().max(MAX_TEXT_CHARS)),
-            )
+            let count = call.int("count").unwrap_or(100).clamp(1, 500) as usize;
+            let start = start as usize;
+            let budget = runtime.effort().fetch_chars().saturating_sub(300).max(1000);
+            let mut text = String::new();
+            let mut next = start;
+            for (index, paragraph) in paragraphs.iter().enumerate().skip(start).take(count) {
+                let line = format!("[p{index}] {paragraph}\n");
+                if text.chars().count() + line.chars().count() > budget {
+                    if next == start {
+                        return ToolOutcome::fail("paragraph too long", format!("Error: paragraph {index} exceeds the read limit; it was not silently truncated."));
+                    }
+                    break;
+                }
+                text.push_str(&line);
+                next = index + 1;
+            }
+            text.push_str(&format!("\nParagraphs {start}..{next} of {}.", paragraphs.len()));
+            if next < paragraphs.len() {
+                text.push_str(&format!(" Continue with docx_read start={next}."));
+            }
+            ToolOutcome::ok(format!("read {} of {} paragraphs", next - start, paragraphs.len()), text)
         }
         Err(err) => ToolOutcome::fail("docx read failed", format!("Error: {err}")),
     }
@@ -526,6 +543,43 @@ mod tests {
         std::fs::write(&path, b"original").unwrap();
         assert!(create_docx(&path, "replacement").is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"original");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn edit_never_overwrites_source_or_existing_output() {
+        let dir = std::env::temp_dir().join(format!("cordial-docx-edit-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("source.docx");
+        create_docx(&source, "Original").unwrap();
+        let original = std::fs::read(&source).unwrap();
+        let edits = vec![Edit { paragraph: 0, text: "New".into() }];
+        assert!(edit_docx(&source, &source, &edits).is_err());
+        assert_eq!(std::fs::read(&source).unwrap(), original);
+        let output = dir.join("output.docx");
+        std::fs::write(&output, b"preserve").unwrap();
+        assert!(edit_docx(&source, &output, &edits).is_err());
+        assert_eq!(std::fs::read(&output).unwrap(), b"preserve");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn read_paginates_without_losing_paragraphs() {
+        use crate::session::ToolArgument;
+        let dir = std::env::temp_dir().join(format!("cordial-docx-pages-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        create_docx(&dir.join("input.docx"), "one\ntwo\nthree").unwrap();
+        let runtime = ToolRuntime::new(dir.clone(), dir.join("scratch"), crate::settings::Effort::Medium).unwrap();
+        let call = ToolCall { id: "test".into(), name: "docx_read".into(), arguments: vec![
+            ToolArgument { name: "path".into(), value: "input.docx".into() },
+            ToolArgument { name: "start".into(), value: "1".into() },
+            ToolArgument { name: "count".into(), value: "1".into() },
+        ] };
+        let result = read(&runtime, &call);
+        assert!(result.ok);
+        assert!(result.text.contains("[p1] two"));
+        assert!(result.text.contains("start=2"));
+        assert!(!result.text.contains("[p2]"));
         std::fs::remove_dir_all(dir).ok();
     }
 
