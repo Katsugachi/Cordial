@@ -336,6 +336,14 @@ async fn generated_complex_tasks_verify_artifacts() {
         "CSV artifact missing expected numbers: {missing:?}"
     );
     assert!(found, "no completed DOCX artifact contained both answers");
+    for (label, task) in [("CSV", &session), ("DOCX", &word_session)] {
+        assert!(!task.plan.is_empty(), "{label} task never created a checklist");
+        assert!(task.plan.iter().all(|step| step.status == cordial_core::session::PlanStatus::Done),
+            "{label} task did not finish its checklist: {:?}", task.plan);
+        let updates = task.messages.iter().flat_map(|message| &message.tool_calls)
+            .filter(|call| call.name == "update_plan").count();
+        assert!(updates >= 2, "{label} task did not show checklist progression");
+    }
 }
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {

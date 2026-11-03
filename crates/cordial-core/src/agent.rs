@@ -168,6 +168,15 @@ impl<'a> Agent<'a> {
             session_id: session.id.clone(),
         });
 
+        // A finished checklist belongs to the preceding task, not a new turn.
+        // Keep unfinished plans so the user can ask the agent to continue them.
+        if self.config.effort == Effort::Task && plan_complete(session) {
+            session.plan.clear();
+            self.events.emit(AgentEvent::PlanUpdated {
+                turn_id: turn_id.clone(),
+                steps: vec![],
+            });
+        }
         let original_user_text = user_text.clone();
         let message = self.user_message(user_text, &attachments);
         session.retitle(&message.content);
@@ -259,7 +268,7 @@ impl<'a> Agent<'a> {
                 {
                     plan_nudges += 1;
                     retry_instruction = if session.plan.is_empty() {
-                        "This is a Task effort turn. Start by calling update_plan with a JSON checklist for the user's request, then work through it. Do not answer yet."
+                        "First create a checklist using this exact tool format, changing the titles to fit the request: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet."
                     } else {
                         "The task checklist is not complete. Continue with the next pending or running step, use tools to verify the result, then call update_plan. Do not give a final answer yet."
                     };
@@ -368,6 +377,11 @@ impl<'a> Agent<'a> {
                     "Tool limit reached before I could summarise.".to_string()
                 } else {
                     parsed.content
+                };
+                let content = if self.config.effort == Effort::Task && !plan_complete(session) {
+                    format!("Task incomplete: the tool budget was reached before the checklist was finished.\n\n{content}")
+                } else {
+                    content
                 };
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {

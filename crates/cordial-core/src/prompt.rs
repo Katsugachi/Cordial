@@ -301,7 +301,10 @@ pub fn system_prompt(
     prompt.push_str("- Files live in the workspace folder. Call list_files or read_file before asking the user for a path.\n");
     prompt.push_str("- run_command executes one read-only workspace command: grep, find, ls, cat, head, tail, wc, stat or pwd. It is not a shell; destructive commands, pipes and redirects are refused.\n");
     prompt.push_str("- For Word worksheets, use docx_read to get numbered paragraphs, research each part, then docx_edit to write answers into a copy. Verify the edited file with docx_read.\n");
-    prompt.push_str("- For Task effort, call update_plan with a JSON checklist before doing the work. Keep one step running, mark steps done only after verification, and finish with a short report of completed and blocked items.\n");
+    if effort == crate::settings::Effort::Task {
+        prompt.push_str("- First call update_plan before other tools. Example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>\n");
+        prompt.push_str("- Replace the example with steps for the actual request. As work progresses, call update_plan again with all steps, marking each done only after verification. Report blocked work honestly.\n");
+    }
     prompt.push_str("- When you have enough information, answer in plain text with no tool call. Stop once the question is answered.\n\n");
 
     prompt.push_str("Style\n");

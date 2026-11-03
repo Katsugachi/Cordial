@@ -208,14 +208,14 @@ jobs:
               | grep -v "llama_model_loader" \
               | head -30 \
               | while IFS= read -r line; do
-                  printf '::error::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
+                  printf '::notice::%s\n' "$(printf '%s' "$line" | sed -e 's/%/%25/g')"
                 done
           fi
           python3 scripts/ci/live_report.py /tmp/live.log docs/live-report.md || true
-          git config user.name "cordial-live"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/live-report.md
-          git diff --cached --quiet || {
-            git commit -m "docs: live model transcript"
-            git push
-          }
+      - name: Upload live transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-model-transcript
+          path: docs/live-report.md
+          if-no-files-found: ignore
