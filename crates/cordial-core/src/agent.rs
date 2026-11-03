@@ -170,7 +170,7 @@ impl<'a> Agent<'a> {
 
         // A finished checklist belongs to the preceding task, not a new turn.
         // Keep unfinished plans so the user can ask the agent to continue them.
-        if self.config.effort == Effort::Task && plan_complete(session) {
+        if self.config.effort == Effort::Task && plan_all_done(session) {
             session.plan.clear();
             self.events.emit(AgentEvent::PlanUpdated {
                 turn_id: turn_id.clone(),
@@ -324,8 +324,8 @@ impl<'a> Agent<'a> {
                     }
                     break StopReason::EmptyAnswer;
                 }
-                let content = if self.config.effort == Effort::Task && !plan_complete(session) {
-                    format!("Task incomplete: the checklist still has unfinished steps or was not created.\n\n{}", parsed.content)
+                let content = if self.config.effort == Effort::Task && !plan_all_done(session) {
+                    format!("Task incomplete: the checklist has unfinished or blocked steps, or was not created.\n\n{}", parsed.content)
                 } else {
                     parsed.content
                 };
@@ -401,8 +401,8 @@ impl<'a> Agent<'a> {
                 } else {
                     parsed.content
                 };
-                let content = if self.config.effort == Effort::Task && !plan_complete(session) {
-                    format!("Task incomplete: the tool budget was reached before the checklist was finished.\n\n{content}")
+                let content = if self.config.effort == Effort::Task && !plan_all_done(session) {
+                    format!("Task incomplete: the tool budget was reached before all checklist steps were done.\n\n{content}")
                 } else {
                     content
                 };
@@ -679,6 +679,10 @@ impl<'a> Agent<'a> {
             .map(|flag| flag.load(Ordering::Relaxed))
             .unwrap_or(false)
     }
+}
+
+fn plan_all_done(session: &Session) -> bool {
+    !session.plan.is_empty() && session.plan.iter().all(|step| step.status == PlanStatus::Done)
 }
 
 fn plan_complete(session: &Session) -> bool {

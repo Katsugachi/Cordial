@@ -646,3 +646,15 @@ async fn unfinished_plan_gets_a_reconciliation_opportunity() {
         .all(|step| step.status == cordial_core::session::PlanStatus::Done));
     assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message == "Continuing the task checklist.")));
 }
+
+#[tokio::test]
+async fn blocked_steps_are_not_reported_as_task_completion() {
+    let fixture = Fixture::new("blocked-task");
+    let mut session = Session::new();
+    let blocked = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Research\",\"status\":\"blocked\",\"note\":\"Network unavailable\"}]</parameter></function></tool_call>";
+    let (result, _) = run_turn(&fixture, vec![blocked, "Done."],
+        config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
+    assert_eq!(session.plan[0].status, cordial_core::session::PlanStatus::Blocked);
+}
