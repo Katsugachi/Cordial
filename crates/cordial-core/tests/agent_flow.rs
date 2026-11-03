@@ -580,7 +580,9 @@ async fn completed_plan_is_not_reused_for_a_new_task() {
     });
     let (result, events) = run_turn(
         &fixture,
-        vec!["Done.", "Done.", "Done.", "Done.", "Done.", "Done.", "Done."],
+        vec![
+            "Done.", "Done.", "Done.", "Done.", "Done.", "Done.", "Done.",
+        ],
         config(Effort::Task, PermissionMode::Auto),
         &mut session,
         None,
@@ -606,8 +608,19 @@ async fn task_planning_retries_before_executing_other_tools() {
     let premature = "<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>";
     let plan = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"running\"}]</parameter></function></tool_call>";
     let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"done\"}]</parameter></function></tool_call>";
-    let (_, events) = run_turn(&fixture, vec![premature, plan, done, "Done."],
-        config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
-    assert!(!events.iter().any(|e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")));
-    assert!(session.plan.iter().all(|step| step.status == cordial_core::session::PlanStatus::Done));
+    let (_, events) = run_turn(
+        &fixture,
+        vec![premature, plan, done, "Done."],
+        config(Effort::Task, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")));
+    assert!(session
+        .plan
+        .iter()
+        .all(|step| step.status == cordial_core::session::PlanStatus::Done));
 }

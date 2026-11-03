@@ -256,7 +256,9 @@ impl<'a> Agent<'a> {
             let parsed = parse_reply(&output.text, thinking);
             retry_instruction = "";
             if planning && !parsed.calls.iter().any(|call| call.name == "update_plan") {
-                self.events.emit(AgentEvent::GenerationReset { turn_id: turn_id.clone() });
+                self.events.emit(AgentEvent::GenerationReset {
+                    turn_id: turn_id.clone(),
+                });
                 retry_instruction = "First call update_plan with a JSON checklist. Example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet.";
                 continue;
             }
