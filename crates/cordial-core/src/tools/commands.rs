@@ -23,27 +23,160 @@ const MAX_ENTRIES: usize = 5_000;
 const MAX_DEPTH: usize = 20;
 const MAX_MATCHES: usize = 2_000;
 
-const ALLOWED: &[&str] = &["pwd", "ls", "cat", "head", "tail", "wc", "grep", "find", "stat"];
+const ALLOWED: &[&str] = &[
+    "pwd", "ls", "cat", "head", "tail", "wc", "grep", "find", "stat",
+];
 
 /// Commands that must never be accepted, even as arguments to another command.
 /// The allowlist above is the security boundary; this list only makes denial
 /// messages and regression tests explicit.
 const DESTRUCTIVE: &[&str] = &[
-    "rm", "rmdir", "del", "erase", "rd", "remove-item", "mv", "move", "move-item", "cp", "copy",
-    "copy-item", "rename", "rename-item", "chmod", "chown", "chgrp", "attrib", "icacls", "takeown",
-    "dd", "mkfs", "fdisk", "diskpart", "format", "shred", "truncate", "tee", "sed", "awk", "perl",
-    "python", "python3", "node", "ruby", "php", "lua", "sh", "bash", "zsh", "fish", "dash", "ksh",
-    "csh", "tcsh", "cmd", "powershell", "pwsh", "sudo", "su", "doas", "runas", "ssh", "scp",
-    "sftp", "rsync", "curl", "wget", "nc", "netcat", "ncat", "telnet", "ftp", "git", "hg", "svn",
-    "npm", "npx", "pnpm", "yarn", "pip", "pip3", "cargo", "rustc", "gcc", "g++", "clang", "make",
-    "cmake", "ninja", "docker", "podman", "kubectl", "systemctl", "service", "launchctl", "schtasks",
-    "crontab", "at", "batch", "kill", "pkill", "killall", "taskkill", "shutdown", "reboot", "halt",
-    "poweroff", "mount", "umount", "ln", "link", "touch", "mkdir", "md", "new-item", "set-content",
-    "add-content", "out-file", "export-csv", "reg", "regedit", "wmic", "msiexec", "rundll32",
-    "regsvr32", "certutil", "bitsadmin", "vssadmin", "bcdedit", "cipher", "fsutil", "iptables",
-    "nft", "ufw", "setfacl", "chflags", "xattr", "open", "xdg-open", "start", "invoke-item",
-    "invoke-expression", "iex", "eval", "exec", "xargs", "findstr", "where", "which", "env", "printenv",
-    "set", "export", "source", ".",
+    "rm",
+    "rmdir",
+    "del",
+    "erase",
+    "rd",
+    "remove-item",
+    "mv",
+    "move",
+    "move-item",
+    "cp",
+    "copy",
+    "copy-item",
+    "rename",
+    "rename-item",
+    "chmod",
+    "chown",
+    "chgrp",
+    "attrib",
+    "icacls",
+    "takeown",
+    "dd",
+    "mkfs",
+    "fdisk",
+    "diskpart",
+    "format",
+    "shred",
+    "truncate",
+    "tee",
+    "sed",
+    "awk",
+    "perl",
+    "python",
+    "python3",
+    "node",
+    "ruby",
+    "php",
+    "lua",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "dash",
+    "ksh",
+    "csh",
+    "tcsh",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "sudo",
+    "su",
+    "doas",
+    "runas",
+    "ssh",
+    "scp",
+    "sftp",
+    "rsync",
+    "curl",
+    "wget",
+    "nc",
+    "netcat",
+    "ncat",
+    "telnet",
+    "ftp",
+    "git",
+    "hg",
+    "svn",
+    "npm",
+    "npx",
+    "pnpm",
+    "yarn",
+    "pip",
+    "pip3",
+    "cargo",
+    "rustc",
+    "gcc",
+    "g++",
+    "clang",
+    "make",
+    "cmake",
+    "ninja",
+    "docker",
+    "podman",
+    "kubectl",
+    "systemctl",
+    "service",
+    "launchctl",
+    "schtasks",
+    "crontab",
+    "at",
+    "batch",
+    "kill",
+    "pkill",
+    "killall",
+    "taskkill",
+    "shutdown",
+    "reboot",
+    "halt",
+    "poweroff",
+    "mount",
+    "umount",
+    "ln",
+    "link",
+    "touch",
+    "mkdir",
+    "md",
+    "new-item",
+    "set-content",
+    "add-content",
+    "out-file",
+    "export-csv",
+    "reg",
+    "regedit",
+    "wmic",
+    "msiexec",
+    "rundll32",
+    "regsvr32",
+    "certutil",
+    "bitsadmin",
+    "vssadmin",
+    "bcdedit",
+    "cipher",
+    "fsutil",
+    "iptables",
+    "nft",
+    "ufw",
+    "setfacl",
+    "chflags",
+    "xattr",
+    "open",
+    "xdg-open",
+    "start",
+    "invoke-item",
+    "invoke-expression",
+    "iex",
+    "eval",
+    "exec",
+    "xargs",
+    "findstr",
+    "where",
+    "which",
+    "env",
+    "printenv",
+    "set",
+    "export",
+    "source",
+    ".",
 ];
 
 pub async fn run(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
@@ -70,7 +203,10 @@ pub async fn run(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
 
 fn execute(workspace: &Path, command: &str) -> ToolOutcome {
     if command.chars().count() > 4096 {
-        return ToolOutcome::fail("command too long", "Error: command exceeds 4096 characters.");
+        return ToolOutcome::fail(
+            "command too long",
+            "Error: command exceeds 4096 characters.",
+        );
     }
     if has_unquoted_shell_syntax(command) {
         return ToolOutcome::fail(
@@ -95,7 +231,10 @@ fn execute(workspace: &Path, command: &str) -> ToolOutcome {
     }
     let args = &tokens[1..];
     if args.iter().any(|arg| arg.chars().any(|ch| ch.is_control())) {
-        return ToolOutcome::fail("argument refused", "Error: control characters are not allowed.");
+        return ToolOutcome::fail(
+            "argument refused",
+            "Error: control characters are not allowed.",
+        );
     }
     let started = Instant::now();
     let result = match name.as_str() {
@@ -176,7 +315,10 @@ fn read_text(path: &Path) -> Result<String, String> {
         return Err(format!("{} is not a regular file", path.display()));
     }
     if meta.len() > MAX_FILE_BYTES {
-        return Err(format!("{} is larger than the 1.5 MB read limit", path.display()));
+        return Err(format!(
+            "{} is larger than the 1.5 MB read limit",
+            path.display()
+        ));
     }
     let bytes = std::fs::read(path).map_err(|err| err.to_string())?;
     if bytes.iter().take(8192).any(|byte| *byte == 0) {
@@ -197,7 +339,9 @@ fn ls(workspace: &Path, args: &[String], started: Instant) -> Result<String, Str
                 all = true;
                 long = true;
             }
-            other if other.starts_with('-') => return Err(format!("ls option not allowed: {other}")),
+            other if other.starts_with('-') => {
+                return Err(format!("ls option not allowed: {other}"))
+            }
             other => path = other,
         }
     }
@@ -224,20 +368,31 @@ fn ls(workspace: &Path, args: &[String], started: Instant) -> Result<String, Str
                 name
             ));
         } else {
-            rows.push(if meta.is_dir() { format!("{name}/") } else { name });
+            rows.push(if meta.is_dir() {
+                format!("{name}/")
+            } else {
+                name
+            });
         }
     }
     rows.sort();
     Ok(rows.join("\n"))
 }
 
-fn cat(workspace: &Path, args: &[String], number: bool, started: Instant) -> Result<String, String> {
+fn cat(
+    workspace: &Path,
+    args: &[String],
+    number: bool,
+    started: Instant,
+) -> Result<String, String> {
     let mut files_arg = Vec::new();
     let mut number = number;
     for arg in args {
         match arg.as_str() {
             "-n" | "--number" => number = true,
-            other if other.starts_with('-') => return Err(format!("cat option not allowed: {other}")),
+            other if other.starts_with('-') => {
+                return Err(format!("cat option not allowed: {other}"))
+            }
             other => files_arg.push(other),
         }
     }
@@ -267,7 +422,12 @@ fn cat(workspace: &Path, args: &[String], number: bool, started: Instant) -> Res
     Ok(out)
 }
 
-fn head_tail(workspace: &Path, args: &[String], head: bool, started: Instant) -> Result<String, String> {
+fn head_tail(
+    workspace: &Path,
+    args: &[String],
+    head: bool,
+    started: Instant,
+) -> Result<String, String> {
     let mut count = 10usize;
     let mut path = None;
     let mut iter = args.iter();
@@ -275,10 +435,16 @@ fn head_tail(workspace: &Path, args: &[String], head: bool, started: Instant) ->
         match arg.as_str() {
             "-n" | "--lines" => {
                 let value = iter.next().ok_or("missing line count")?;
-                count = value.parse::<usize>().map_err(|_| "invalid line count")?.min(10_000);
+                count = value
+                    .parse::<usize>()
+                    .map_err(|_| "invalid line count")?
+                    .min(10_000);
             }
             other if other.starts_with("-n") => {
-                count = other[2..].parse::<usize>().map_err(|_| "invalid line count")?.min(10_000);
+                count = other[2..]
+                    .parse::<usize>()
+                    .map_err(|_| "invalid line count")?
+                    .min(10_000);
             }
             other if other.starts_with('-') => return Err(format!("option not allowed: {other}")),
             other => path = Some(other),
@@ -291,7 +457,13 @@ fn head_tail(workspace: &Path, args: &[String], head: bool, started: Instant) ->
     let selected = if head {
         lines.iter().take(count).copied().collect::<Vec<_>>()
     } else {
-        lines.iter().rev().take(count).rev().copied().collect::<Vec<_>>()
+        lines
+            .iter()
+            .rev()
+            .take(count)
+            .rev()
+            .copied()
+            .collect::<Vec<_>>()
     };
     Ok(selected.join("\n"))
 }
@@ -306,7 +478,9 @@ fn wc(workspace: &Path, args: &[String], started: Instant) -> Result<String, Str
             "-l" => lines = true,
             "-w" => words = true,
             "-c" | "-m" => chars = true,
-            other if other.starts_with('-') => return Err(format!("wc option not allowed: {other}")),
+            other if other.starts_with('-') => {
+                return Err(format!("wc option not allowed: {other}"))
+            }
             other => paths.push(other),
         }
     }
@@ -333,7 +507,11 @@ fn wc(workspace: &Path, args: &[String], started: Instant) -> Result<String, Str
         if chars {
             parts.push(text.chars().count().to_string());
         }
-        out.push_str(&format!("{} {}\n", parts.join(" "), relative(workspace, &path)));
+        out.push_str(&format!(
+            "{} {}\n",
+            parts.join(" "),
+            relative(workspace, &path)
+        ));
     }
     Ok(out)
 }
@@ -368,7 +546,14 @@ fn grep(workspace: &Path, args: &[String], started: Instant) -> Result<String, S
             "-E" | "--extended-regexp" => {}
             "-v" | "--invert-match" => invert = true,
             "-e" => pattern = Some(iter.next().ok_or("missing pattern")?.clone()),
-            other if other.starts_with('-') && other.len() > 2 && !other.starts_with("--") && other[1..].chars().all(|ch| matches!(ch, 'i' | 'n' | 'r' | 'R' | 'l' | 'F' | 'E' | 'v')) => {
+            other
+                if other.starts_with('-')
+                    && other.len() > 2
+                    && !other.starts_with("--")
+                    && other[1..]
+                        .chars()
+                        .all(|ch| matches!(ch, 'i' | 'n' | 'r' | 'R' | 'l' | 'F' | 'E' | 'v')) =>
+            {
                 for ch in other[1..].chars() {
                     match ch {
                         'i' => ignore_case = true,
@@ -421,11 +606,34 @@ fn grep(workspace: &Path, args: &[String], started: Instant) -> Result<String, S
         let meta = std::fs::symlink_metadata(&path).map_err(|err| err.to_string())?;
         if meta.is_dir() {
             if !recursive {
-                return Err(format!("{} is a directory; use -r", relative(workspace, &path)));
+                return Err(format!(
+                    "{} is a directory; use -r",
+                    relative(workspace, &path)
+                ));
             }
-            grep_dir(workspace, &path, &regex, line_numbers, files_only, invert, started, &mut out, &mut matches)?;
+            grep_dir(
+                workspace,
+                &path,
+                &regex,
+                line_numbers,
+                files_only,
+                invert,
+                started,
+                &mut out,
+                &mut matches,
+            )?;
         } else if meta.is_file() {
-            grep_file(workspace, &path, &regex, line_numbers, files_only, invert, started, &mut out, &mut matches)?;
+            grep_file(
+                workspace,
+                &path,
+                &regex,
+                line_numbers,
+                files_only,
+                invert,
+                started,
+                &mut out,
+                &mut matches,
+            )?;
         }
         if matches >= MAX_MATCHES {
             out.push_str("…match limit reached\n");
@@ -473,7 +681,17 @@ fn grep_dir(
                     stack.push((path, depth + 1));
                 }
             } else if meta.is_file() {
-                grep_file(workspace, &path, regex, line_numbers, files_only, invert, started, out, matches)?;
+                grep_file(
+                    workspace,
+                    &path,
+                    regex,
+                    line_numbers,
+                    files_only,
+                    invert,
+                    started,
+                    out,
+                    matches,
+                )?;
             }
         }
     }
@@ -505,7 +723,11 @@ fn grep_file(
                 break;
             }
             if line_numbers {
-                out.push_str(&format!("{}:{}:{line}\n", relative(workspace, path), index + 1));
+                out.push_str(&format!(
+                    "{}:{}:{line}\n",
+                    relative(workspace, path),
+                    index + 1
+                ));
             } else {
                 out.push_str(&format!("{}: {line}\n", relative(workspace, path)));
             }
@@ -526,10 +748,26 @@ fn find(workspace: &Path, args: &[String], started: Instant) -> Result<String, S
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "-name" | "-iname" => name = Some((iter.next().ok_or("missing -name pattern")?.clone(), arg == "-iname")),
+            "-name" | "-iname" => {
+                name = Some((
+                    iter.next().ok_or("missing -name pattern")?.clone(),
+                    arg == "-iname",
+                ))
+            }
             "-type" => kind = Some(iter.next().ok_or("missing -type")?.clone()),
-            "-maxdepth" => max_depth = iter.next().ok_or("missing -maxdepth")?.parse::<usize>().map_err(|_| "invalid -maxdepth")?.min(MAX_DEPTH),
-            other if other.starts_with('-') => return Err(format!("find option not allowed: {other}; -exec and -delete are never available")),
+            "-maxdepth" => {
+                max_depth = iter
+                    .next()
+                    .ok_or("missing -maxdepth")?
+                    .parse::<usize>()
+                    .map_err(|_| "invalid -maxdepth")?
+                    .min(MAX_DEPTH)
+            }
+            other if other.starts_with('-') => {
+                return Err(format!(
+                    "find option not allowed: {other}; -exec and -delete are never available"
+                ))
+            }
             other => path = other.to_string(),
         }
     }
@@ -628,7 +866,13 @@ fn stat(workspace: &Path, args: &[String], started: Instant) -> Result<String, S
         out.push_str(&format!(
             "{}: {} {} bytes\n",
             relative(workspace, &path),
-            if meta.is_dir() { "directory" } else if meta.is_file() { "file" } else { "other" },
+            if meta.is_dir() {
+                "directory"
+            } else if meta.is_file() {
+                "file"
+            } else {
+                "other"
+            },
             meta.len()
         ));
     }

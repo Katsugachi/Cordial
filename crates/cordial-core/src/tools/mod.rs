@@ -338,7 +338,10 @@ impl ToolRuntime {
             "docx_read" => docx::read(self, call),
             "docx_edit" => docx::edit(self, call),
             "docx_create" => docx::create(self, call),
-            "update_plan" => ToolOutcome::fail("plan handled by agent", "Error: update_plan must be handled by the agent loop."),
+            "update_plan" => ToolOutcome::fail(
+                "plan handled by agent",
+                "Error: update_plan must be handled by the agent loop.",
+            ),
             other => ToolOutcome::fail(
                 format!("unknown tool: {other}"),
                 format!(
@@ -487,7 +490,12 @@ impl ToolRuntime {
 
     /// Reads a user attachment as text (used for file inputs).
     pub fn read_attachment_text(&self, path: &std::path::Path, max_chars: usize) -> Option<String> {
-        if path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.eq_ignore_ascii_case("docx")).unwrap_or(false) {
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("docx"))
+            .unwrap_or(false)
+        {
             return docx::attachment_text(path, max_chars).ok();
         }
         files::read_text_bounded(path, max_chars).ok()

@@ -65,7 +65,10 @@ pub fn edit(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         Err(err) => return ToolOutcome::fail("invalid edits", format!("Error: {err}")),
     };
     if edits.is_empty() || edits.len() > 500 {
-        return ToolOutcome::fail("invalid edits", "Error: provide between 1 and 500 paragraph edits.");
+        return ToolOutcome::fail(
+            "invalid edits",
+            "Error: provide between 1 and 500 paragraph edits.",
+        );
     }
     let output = match call.arg("output") {
         Some(raw) => match files::resolve(runtime.workspace(), raw) {
@@ -74,18 +77,36 @@ pub fn edit(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         },
         None => {
             let name = default_output(&path);
-            let relative = match name.strip_prefix(runtime.workspace().canonicalize().unwrap_or_else(|_| runtime.workspace().to_path_buf())) {
+            let relative = match name.strip_prefix(
+                runtime
+                    .workspace()
+                    .canonicalize()
+                    .unwrap_or_else(|_| runtime.workspace().to_path_buf()),
+            ) {
                 Ok(relative) => relative.to_string_lossy().into_owned(),
-                Err(_) => return ToolOutcome::fail("path refused", "Error: output is outside the workspace."),
+                Err(_) => {
+                    return ToolOutcome::fail(
+                        "path refused",
+                        "Error: output is outside the workspace.",
+                    )
+                }
             };
             match files::resolve(runtime.workspace(), &relative) {
                 Ok(path) => path,
                 Err(err) => return ToolOutcome::fail("path refused", format!("Error: {err}")),
             }
-        },
+        }
     };
-    if output.extension().and_then(|ext| ext.to_str()).map(|ext| !ext.eq_ignore_ascii_case("docx")).unwrap_or(true) {
-        return ToolOutcome::fail("invalid output", "Error: the output path must end in .docx.");
+    if output
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| !ext.eq_ignore_ascii_case("docx"))
+        .unwrap_or(true)
+    {
+        return ToolOutcome::fail(
+            "invalid output",
+            "Error: the output path must end in .docx.",
+        );
     }
     match edit_docx(&path, &output, &edits) {
         Ok(count) => ToolOutcome::ok(
@@ -98,7 +119,10 @@ pub fn edit(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
 
 pub fn create(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     let (Some(raw), Some(content)) = (call.arg("path"), call.arg("content")) else {
-        return ToolOutcome::fail("missing arguments", "Error: `path` and `content` are required.");
+        return ToolOutcome::fail(
+            "missing arguments",
+            "Error: `path` and `content` are required.",
+        );
     };
     if content.len() > 1_000_000 {
         return ToolOutcome::fail("content too large", "Error: content exceeds 1 MB.");
@@ -107,7 +131,12 @@ pub fn create(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         Ok(path) => path,
         Err(err) => return ToolOutcome::fail("path refused", format!("Error: {err}")),
     };
-    if path.extension().and_then(|ext| ext.to_str()).map(|ext| !ext.eq_ignore_ascii_case("docx")).unwrap_or(true) {
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| !ext.eq_ignore_ascii_case("docx"))
+        .unwrap_or(true)
+    {
         return ToolOutcome::fail("invalid path", "Error: the output path must end in .docx.");
     }
     match create_docx(&path, content) {
@@ -123,7 +152,10 @@ struct Edit {
 }
 
 fn default_output(path: &Path) -> std::path::PathBuf {
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("document");
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document");
     path.with_file_name(format!("{stem}.edited.docx"))
 }
 
@@ -261,15 +293,25 @@ fn edit_docx(path: &Path, output: &Path, edits: &[Edit]) -> Result<usize, String
     for name in names {
         let mut entry = archive.by_name(&name).map_err(|err| err.to_string())?;
         if entry.is_dir() {
-            writer.add_directory(name, options).map_err(|err| err.to_string())?;
+            writer
+                .add_directory(name, options)
+                .map_err(|err| err.to_string())?;
             continue;
         }
-        writer.start_file(&name, options).map_err(|err| err.to_string())?;
+        writer
+            .start_file(&name, options)
+            .map_err(|err| err.to_string())?;
         if name == "word/document.xml" {
-            writer.write_all(updated.as_bytes()).map_err(|err| err.to_string())?;
+            writer
+                .write_all(updated.as_bytes())
+                .map_err(|err| err.to_string())?;
         } else {
             let mut bytes = Vec::new();
-            entry.by_ref().take(MAX_XML_BYTES + 1).read_to_end(&mut bytes).map_err(|err| err.to_string())?;
+            entry
+                .by_ref()
+                .take(MAX_XML_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|err| err.to_string())?;
             if bytes.len() as u64 > MAX_XML_BYTES {
                 return Err("DOCX entry exceeded the read limit".to_string());
             }
@@ -305,7 +347,9 @@ fn replace_paragraphs(xml: &str, edits: &[Edit]) -> Result<(String, usize), Stri
                 } else if local.as_ref() == "t" && in_target {
                     in_text = true;
                 }
-                writer.write_event(Event::Start(start.into_owned())).map_err(|err| err.to_string())?;
+                writer
+                    .write_event(Event::Start(start.into_owned()))
+                    .map_err(|err| err.to_string())?;
             }
             Event::End(end) => {
                 let local = end.local_name();
@@ -313,36 +357,53 @@ fn replace_paragraphs(xml: &str, edits: &[Edit]) -> Result<(String, usize), Stri
                     in_text = false;
                 } else if local.as_ref() == "p" {
                     if in_target && !wrote_replacement {
-                        return Err(format!("paragraph {} has no editable text run", paragraph.unwrap_or(0)));
+                        return Err(format!(
+                            "paragraph {} has no editable text run",
+                            paragraph.unwrap_or(0)
+                        ));
                     }
                     in_target = false;
                     current_edit = None;
                 }
-                writer.write_event(Event::End(end.into_owned())).map_err(|err| err.to_string())?;
+                writer
+                    .write_event(Event::End(end.into_owned()))
+                    .map_err(|err| err.to_string())?;
             }
             Event::Text(text) => {
                 if in_text && in_target {
                     if let Some(edit) = current_edit {
                         if !wrote_replacement {
                             let escaped = escape(&edit.text);
-                            writer.write_event(Event::Text(BytesText::from_escaped(escaped.into_owned()))).map_err(|err| err.to_string())?;
+                            writer
+                                .write_event(Event::Text(BytesText::from_escaped(
+                                    escaped.into_owned(),
+                                )))
+                                .map_err(|err| err.to_string())?;
                             wrote_replacement = true;
                             count += 1;
                         } else {
-                            writer.write_event(Event::Text(BytesText::from_escaped(""))).map_err(|err| err.to_string())?;
+                            writer
+                                .write_event(Event::Text(BytesText::from_escaped("")))
+                                .map_err(|err| err.to_string())?;
                         }
                     }
                 } else {
-                    writer.write_event(Event::Text(text.into_owned())).map_err(|err| err.to_string())?;
+                    writer
+                        .write_event(Event::Text(text.into_owned()))
+                        .map_err(|err| err.to_string())?;
                 }
             }
             other => {
-                writer.write_event(other.into_owned()).map_err(|err| err.to_string())?;
+                writer
+                    .write_event(other.into_owned())
+                    .map_err(|err| err.to_string())?;
             }
         }
     }
     let bytes = writer.into_inner().into_inner();
-    String::from_utf8(bytes).map(|text| (text, count)).map_err(|err| err.to_string())
+    String::from_utf8(bytes)
+        .map(|text| (text, count))
+        .map_err(|err| err.to_string())
 }
 
 fn create_docx(path: &Path, content: &str) -> Result<(), String> {
@@ -352,7 +413,9 @@ fn create_docx(path: &Path, content: &str) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|err| err.to_string())?;
     let mut writer = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    let mut document = String::from(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#);
+    let mut document = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+    );
     for line in content.lines() {
         document.push_str("<w:p><w:r><w:t xml:space=\"preserve\">");
         document.push_str(&escape(line));
@@ -360,13 +423,23 @@ fn create_docx(path: &Path, content: &str) -> Result<(), String> {
     }
     document.push_str(r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>"#);
     let entries: &[(&str, &str)] = &[
-        ("[Content_Types].xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#),
-        ("_rels/.rels", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#),
+        (
+            "[Content_Types].xml",
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#,
+        ),
+        (
+            "_rels/.rels",
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#,
+        ),
         ("word/document.xml", &document),
     ];
     for (name, body) in entries {
-        writer.start_file(*name, options).map_err(|err| err.to_string())?;
-        writer.write_all(body.as_bytes()).map_err(|err| err.to_string())?;
+        writer
+            .start_file(*name, options)
+            .map_err(|err| err.to_string())?;
+        writer
+            .write_all(body.as_bytes())
+            .map_err(|err| err.to_string())?;
     }
     writer.finish().map_err(|err| err.to_string())?;
     Ok(())
@@ -397,7 +470,10 @@ mod tests {
     #[test]
     fn replaces_only_target_paragraph() {
         let xml = r#"<w:document xmlns:w="x"><w:body><w:p><w:r><w:t>Question</w:t></w:r></w:p><w:p><w:r><w:t>Blank</w:t></w:r></w:p></w:body></w:document>"#;
-        let edits = vec![Edit { paragraph: 1, text: "Answer <safe>".to_string() }];
+        let edits = vec![Edit {
+            paragraph: 1,
+            text: "Answer <safe>".to_string(),
+        }];
         let (updated, count) = replace_paragraphs(xml, &edits).unwrap();
         assert_eq!(count, 1);
         let paragraphs = parse_paragraphs(&updated).unwrap();

@@ -50,7 +50,10 @@ fn call(command: &str) -> ToolCall {
     ToolCall {
         id: "c1".into(),
         name: "run_command".into(),
-        arguments: vec![ToolArgument { name: "command".into(), value: command.into() }],
+        arguments: vec![ToolArgument {
+            name: "command".into(),
+            value: command.into(),
+        }],
     }
 }
 
@@ -93,8 +96,15 @@ async fn destructive_commands_are_refused_and_have_no_effect() {
     ];
     for command in commands {
         let outcome = runtime.execute(&call(command)).await;
-        assert!(!outcome.ok, "command was allowed: {command}\n{}", outcome.text);
-        assert!(fixture.workspace.join("notes.txt").exists(), "command changed files: {command}");
+        assert!(
+            !outcome.ok,
+            "command was allowed: {command}\n{}",
+            outcome.text
+        );
+        assert!(
+            fixture.workspace.join("notes.txt").exists(),
+            "command changed files: {command}"
+        );
     }
 }
 
@@ -135,7 +145,11 @@ async fn path_escapes_are_refused() {
         "stat ../outside.txt",
     ] {
         let outcome = runtime.execute(&call(command)).await;
-        assert!(!outcome.ok, "path escape was allowed: {command}\n{}", outcome.text);
+        assert!(
+            !outcome.ok,
+            "path escape was allowed: {command}\n{}",
+            outcome.text
+        );
         assert!(!outcome.text.contains("secret"));
     }
 }
@@ -149,9 +163,18 @@ async fn symlink_escape_is_refused() {
     std::fs::create_dir_all(&outside).unwrap();
     std::fs::write(outside.join("secret.txt"), "secret").unwrap();
     std::os::unix::fs::symlink(&outside, fixture.workspace.join("link")).unwrap();
-    for command in ["cat link/secret.txt", "grep secret link", "ls link", "find link -type f"] {
+    for command in [
+        "cat link/secret.txt",
+        "grep secret link",
+        "ls link",
+        "find link -type f",
+    ] {
         let outcome = runtime.execute(&call(command)).await;
-        assert!(!outcome.ok || !outcome.text.contains("secret"), "symlink escape: {command}\n{}", outcome.text);
+        assert!(
+            !outcome.ok || !outcome.text.contains("secret"),
+            "symlink escape: {command}\n{}",
+            outcome.text
+        );
     }
 }
 
@@ -173,8 +196,16 @@ async fn read_only_commands_work_inside_workspace() {
     ];
     for (command, expected) in cases {
         let outcome = runtime.execute(&call(command)).await;
-        assert!(outcome.ok, "allowed command failed: {command}\n{}", outcome.text);
-        assert!(outcome.text.contains(expected), "command {command} returned {}", outcome.text);
+        assert!(
+            outcome.ok,
+            "allowed command failed: {command}\n{}",
+            outcome.text
+        );
+        assert!(
+            outcome.text.contains(expected),
+            "command {command} returned {}",
+            outcome.text
+        );
     }
 }
 
@@ -182,7 +213,9 @@ async fn read_only_commands_work_inside_workspace() {
 async fn quoted_regex_metacharacters_are_not_shell_syntax() {
     let fixture = Fixture::new("regex");
     let runtime = fixture.runtime();
-    let outcome = runtime.execute(&call("grep -E 'TODO|alpha' notes.txt")).await;
+    let outcome = runtime
+        .execute(&call("grep -E 'TODO|alpha' notes.txt"))
+        .await;
     assert!(outcome.ok, "{}", outcome.text);
     assert!(outcome.text.contains("alpha"));
     assert!(outcome.text.contains("TODO"));

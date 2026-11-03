@@ -20,7 +20,9 @@ use crate::events::{AgentEvent, EventSink, StopReason};
 use crate::permissions::{Permission, PermissionPolicy};
 use crate::prompt::{self, PromptOptions, DEFAULT_MEDIA_MARKER};
 use crate::protocol::parse_reply;
-use crate::session::{Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Session, SessionStore, ToolCall};
+use crate::session::{
+    Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Session, SessionStore, ToolCall,
+};
 use crate::settings::{Effort, PermissionMode, Settings};
 use crate::tools::{self, ToolRuntime, ToolSpec};
 use crate::util::{now_ms, truncate_chars};
@@ -253,7 +255,8 @@ impl<'a> Agent<'a> {
             }
 
             if parsed.calls.is_empty() {
-                if self.config.effort == Effort::Task && plan_nudges < 3 && !plan_complete(session) {
+                if self.config.effort == Effort::Task && plan_nudges < 3 && !plan_complete(session)
+                {
                     plan_nudges += 1;
                     retry_instruction = if session.plan.is_empty() {
                         "This is a Task effort turn. Start by calling update_plan with a JSON checklist for the user's request, then work through it. Do not answer yet."
@@ -583,7 +586,11 @@ impl<'a> Agent<'a> {
                         PlanStatus::Blocked => "blocked",
                     },
                     step.title,
-                    if step.note.is_empty() { String::new() } else { format!(" ({})", step.note) }
+                    if step.note.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", step.note)
+                    }
                 ));
             }
         }
@@ -652,33 +659,69 @@ fn apply_plan(session: &mut Session, call: &ToolCall) -> tools::ToolOutcome {
     let mut steps = Vec::new();
     for (index, item) in items.iter().enumerate() {
         let Some(title) = item.get("title").and_then(|v| v.as_str()).map(str::trim) else {
-            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} needs a title."));
+            return tools::ToolOutcome::fail(
+                "invalid plan",
+                format!("Error: step {index} needs a title."),
+            );
         };
         if title.is_empty() || title.chars().count() > 200 {
-            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} title must be 1-200 characters."));
+            return tools::ToolOutcome::fail(
+                "invalid plan",
+                format!("Error: step {index} title must be 1-200 characters."),
+            );
         }
-        let status = match item.get("status").and_then(|v| v.as_str()).unwrap_or("pending") {
+        let status = match item
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("pending")
+        {
             "pending" => PlanStatus::Pending,
             "running" => PlanStatus::Running,
             "done" => PlanStatus::Done,
             "blocked" => PlanStatus::Blocked,
-            other => return tools::ToolOutcome::fail("invalid plan", format!("Error: unknown status `{other}`.")),
+            other => {
+                return tools::ToolOutcome::fail(
+                    "invalid plan",
+                    format!("Error: unknown status `{other}`."),
+                )
+            }
         };
         let note = item.get("note").and_then(|v| v.as_str()).unwrap_or("");
         if note.chars().count() > 500 {
-            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} note is too long."));
+            return tools::ToolOutcome::fail(
+                "invalid plan",
+                format!("Error: step {index} note is too long."),
+            );
         }
-        steps.push(PlanStep { id: index, title: title.to_string(), status, note: note.to_string() });
+        steps.push(PlanStep {
+            id: index,
+            title: title.to_string(),
+            status,
+            note: note.to_string(),
+        });
     }
-    let running = steps.iter().filter(|step| step.status == PlanStatus::Running).count();
+    let running = steps
+        .iter()
+        .filter(|step| step.status == PlanStatus::Running)
+        .count();
     if running > 1 {
-        return tools::ToolOutcome::fail("invalid plan", "Error: keep at most one step running at a time.");
+        return tools::ToolOutcome::fail(
+            "invalid plan",
+            "Error: keep at most one step running at a time.",
+        );
     }
     session.plan = steps;
-    let done = session.plan.iter().filter(|step| step.status == PlanStatus::Done).count();
+    let done = session
+        .plan
+        .iter()
+        .filter(|step| step.status == PlanStatus::Done)
+        .count();
     tools::ToolOutcome::ok(
         format!("plan {done}/{}", session.plan.len()),
-        format!("Checklist updated: {done}/{} steps done.", session.plan.len()),
+        format!(
+            "Checklist updated: {done}/{} steps done.",
+            session.plan.len()
+        ),
     )
 }
 

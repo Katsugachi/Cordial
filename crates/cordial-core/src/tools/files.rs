@@ -288,7 +288,10 @@ mod tests {
     #[test]
     fn symlink_escape_is_refused() {
         let workspace = temp_workspace("symlink");
-        let outside = workspace.parent().unwrap().join(format!("outside-{}", crate::util::now_ms()));
+        let outside = workspace
+            .parent()
+            .unwrap()
+            .join(format!("outside-{}", crate::util::now_ms()));
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("secret.txt"), "secret").unwrap();
         std::os::unix::fs::symlink(&outside, workspace.join("link")).unwrap();
