@@ -682,7 +682,11 @@ impl<'a> Agent<'a> {
 }
 
 fn plan_all_done(session: &Session) -> bool {
-    !session.plan.is_empty() && session.plan.iter().all(|step| step.status == PlanStatus::Done)
+    !session.plan.is_empty()
+        && session
+            .plan
+            .iter()
+            .all(|step| step.status == PlanStatus::Done)
 }
 
 fn plan_complete(session: &Session) -> bool {
