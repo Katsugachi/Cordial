@@ -624,3 +624,16 @@ async fn task_planning_retries_before_executing_other_tools() {
         .iter()
         .all(|step| step.status == cordial_core::session::PlanStatus::Done));
 }
+
+#[tokio::test]
+async fn unfinished_plan_gets_a_reconciliation_opportunity() {
+    let fixture = Fixture::new("reconcile-plan");
+    let mut session = Session::new();
+    let start = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Check work\",\"status\":\"running\"}]</parameter></function></tool_call>";
+    let finish = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Check work\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let (result, events) = run_turn(&fixture, vec![start, "Finished.", finish, "Verified."],
+        config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(session.plan.iter().all(|step| step.status == cordial_core::session::PlanStatus::Done));
+    assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message == "Continuing the task checklist.")));
+}

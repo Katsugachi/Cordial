@@ -193,6 +193,7 @@ impl<'a> Agent<'a> {
         let mut retry_instruction = "";
         let mut plan_nudges = 0u32;
         let mut planning_attempts = 0u32;
+        let mut reconcile_next = false;
 
         let outcome = loop {
             if self.cancelled() {
@@ -208,8 +209,11 @@ impl<'a> Agent<'a> {
             let mut tools_for_prompt = tools::specs(self.config.web_enabled);
             if planning {
                 planning_attempts += 1;
+            }
+            if planning || reconcile_next {
                 tools_for_prompt.retain(|tool| tool.name == "update_plan");
             }
+            reconcile_next = false;
             let output = match self
                 .generate_with_retry(
                     session,
@@ -285,10 +289,11 @@ impl<'a> Agent<'a> {
                 if self.config.effort == Effort::Task && plan_nudges < 3 && !plan_complete(session)
                 {
                     plan_nudges += 1;
+                    reconcile_next = !session.plan.is_empty();
                     retry_instruction = if session.plan.is_empty() {
                         "First create a checklist using this exact tool format, changing the titles to fit the request: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet."
                     } else {
-                        "The task checklist is not complete. Continue with the next pending or running step, use tools to verify the result, then call update_plan. Do not give a final answer yet."
+                        "Review the tool results and the current checklist. Call update_plan now with every checklist step and its current status. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
                     };
                     self.events.emit(AgentEvent::GenerationReset {
                         turn_id: turn_id.clone(),
