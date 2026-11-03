@@ -572,16 +572,29 @@ async fn completed_plan_is_not_reused_for_a_new_task() {
     use cordial_core::session::{PlanStatus, PlanStep};
     let fixture = Fixture::new("new-task-plan");
     let mut session = Session::new();
-    session.plan.push(PlanStep { id: 0, title: "Old task".into(), status: PlanStatus::Done, note: String::new() });
+    session.plan.push(PlanStep {
+        id: 0,
+        title: "Old task".into(),
+        status: PlanStatus::Done,
+        note: String::new(),
+    });
     let (result, events) = run_turn(
         &fixture,
         vec!["Done.", "Done.", "Done.", "Done."],
         config(Effort::Task, PermissionMode::Auto),
         &mut session,
         None,
-    ).await;
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(session.plan.is_empty());
-    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::PlanUpdated { steps, .. } if steps.is_empty())));
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("Task incomplete"));
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::PlanUpdated { steps, .. } if steps.is_empty())));
 }
