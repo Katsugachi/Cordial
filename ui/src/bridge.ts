@@ -29,6 +29,7 @@ export interface Bridge {
   downloadModel(): Promise<void>;
   deleteModel(): Promise<void>;
   pickFiles(): Promise<string[]>;
+  pickFolder(): Promise<string | null>;
   openPath(path: string): Promise<void>;
   onEvent(handler: (event: AgentEvent) => void): Promise<() => void>;
 }
@@ -38,7 +39,7 @@ function hasTauri(): boolean {
 }
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
-const TEXT_EXTENSIONS = ["txt", "md", "markdown", "json", "csv", "log", "rs", "ts", "js", "py", "toml", "yaml", "yml", "html", "css"];
+const TEXT_EXTENSIONS = ["txt", "md", "markdown", "json", "csv", "log", "rs", "ts", "js", "py", "toml", "yaml", "yml", "html", "css", "docx"];
 
 class TauriBridge implements Bridge {
   readonly demo = false;
@@ -111,6 +112,12 @@ class TauriBridge implements Bridge {
     });
     if (!selection) return [];
     return Array.isArray(selection) ? selection : [selection];
+  }
+
+  async pickFolder(): Promise<string | null> {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selection = await open({ multiple: false, directory: true, title: "Choose a working folder" });
+    return typeof selection === "string" ? selection : null;
   }
 
   async openPath(path: string): Promise<void> {
@@ -349,6 +356,10 @@ class DemoBridge implements Bridge {
 
   async pickFiles(): Promise<string[]> {
     return [];
+  }
+
+  async pickFolder(): Promise<string | null> {
+    return null;
   }
 
   async openPath(): Promise<void> {

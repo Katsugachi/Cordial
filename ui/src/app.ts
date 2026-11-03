@@ -339,6 +339,36 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
     }
   }
 
+  async function chooseFolder(): Promise<void> {
+    try {
+      const folder = await bridge.pickFolder();
+      if (!folder) return;
+      const ok = await persistSettings({ ...state.settings, workspace_dir: folder });
+      if (ok) {
+        state.workspace = folder;
+        announce("Working folder updated.");
+        render();
+      }
+    } catch (error) {
+      state.error = error instanceof Error ? error.message : String(error);
+      render();
+    }
+  }
+
+  async function resetFolder(): Promise<void> {
+    const ok = await persistSettings({ ...state.settings, workspace_dir: "" });
+    if (ok) {
+      try {
+        const info = await bridge.bootstrap();
+        state.workspace = info.workspace_dir;
+      } catch {
+        state.workspace = "";
+      }
+      announce("Using the default working folder.");
+      render();
+    }
+  }
+
   async function attachFiles(): Promise<void> {
     try {
       const paths = await bridge.pickFiles();
@@ -364,7 +394,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
     const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
-    if (state.busy && ["new-session", "open-session", "delete-session", "open-memory", "open-skill", "remove-model"].includes(action || "")) return;
+    if (state.busy && ["new-session", "open-session", "delete-session", "open-memory", "open-skill", "remove-model", "choose-folder", "reset-folder"].includes(action || "")) return;
 
     switch (action) {
       case "new-session":
@@ -430,6 +460,12 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
           })();
         }
         break;
+      case "choose-folder":
+        void chooseFolder();
+        break;
+      case "reset-folder":
+        void resetFolder();
+        break;
       case "open-memory":
         openEditor("memory");
         break;
@@ -477,7 +513,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
 
   root.addEventListener("change", (event) => {
     const select = event.target as HTMLSelectElement;
-    if (select.id === "effort-select" && ["low", "medium", "high"].includes(select.value)) {
+    if (select.id === "effort-select" && ["low", "medium", "high", "task"].includes(select.value)) {
       void persistSettings({ ...state.settings, effort: select.value as Effort });
     } else if (select.id === "permission-select" && ["auto", "manual"].includes(select.value)) {
       void persistSettings({ ...state.settings, permission_mode: select.value as PermissionMode });

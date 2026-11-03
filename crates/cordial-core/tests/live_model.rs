@@ -220,6 +220,7 @@ impl Live {
             approvals: &gate,
             events: &sink,
             config,
+            store: None,
         };
         let result = agent.run(&mut session, text.to_string(), attachments).await;
         drop(agent);
@@ -500,6 +501,7 @@ async fn cancellation_does_not_break_the_next_turn() {
         approvals: &gate,
         events: &sink,
         config,
+        store: None,
     };
     let result = agent
         .run(

@@ -118,6 +118,7 @@ async fn run_turn(
         approvals: &gate,
         events: &sink,
         config: cfg,
+        store: None,
     };
     let result = agent
         .run(session, "What is in my notes?".to_string(), Vec::new())
@@ -315,6 +316,7 @@ async fn context_overflow_trims_old_turns_and_retries() {
         approvals: &gate,
         events: &sink,
         config: config(Effort::Medium, PermissionMode::Auto),
+        store: None,
     };
     let result = agent
         .run(&mut session, "second question".to_string(), Vec::new())
@@ -346,6 +348,7 @@ async fn cancellation_stops_before_generating() {
         approvals: &gate,
         events: &sink,
         config: config(Effort::Medium, PermissionMode::Auto),
+        store: None,
     };
     let result = agent
         .run(&mut session, "stop me".to_string(), Vec::new())
@@ -371,6 +374,7 @@ async fn text_attachments_are_read_into_the_prompt() {
         approvals: &gate,
         events: &sink,
         config: config(Effort::Medium, PermissionMode::Auto),
+        store: None,
     };
     let attachment = Attachment {
         kind: AttachmentKind::Text,
@@ -423,6 +427,7 @@ async fn user_memory_and_skill_are_included_across_sessions() {
             approvals: &gate,
             events: &sink,
             config,
+            store: None,
         };
         agent
             .run(&mut Session::new(), "First chat".into(), vec![])

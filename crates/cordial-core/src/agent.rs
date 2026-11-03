@@ -20,7 +20,7 @@ use crate::events::{AgentEvent, EventSink, StopReason};
 use crate::permissions::{Permission, PermissionPolicy};
 use crate::prompt::{self, PromptOptions, DEFAULT_MEDIA_MARKER};
 use crate::protocol::parse_reply;
-use crate::session::{Attachment, AttachmentKind, Message, Session, ToolCall};
+use crate::session::{Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Session, SessionStore, ToolCall};
 use crate::settings::{Effort, PermissionMode, Settings};
 use crate::tools::{self, ToolRuntime, ToolSpec};
 use crate::util::{now_ms, truncate_chars};
@@ -148,6 +148,9 @@ pub struct Agent<'a> {
     pub approvals: &'a ApprovalGate,
     pub events: &'a EventSink,
     pub config: AgentConfig,
+    /// Optional durable checkpoint target. The desktop app sets this so a long
+    /// Task turn keeps its transcript and checklist even if the window closes.
+    pub store: Option<&'a SessionStore>,
 }
 
 impl<'a> Agent<'a> {
@@ -167,6 +170,7 @@ impl<'a> Agent<'a> {
         let message = self.user_message(user_text, &attachments);
         session.retitle(&message.content);
         session.push(message);
+        self.checkpoint(session);
 
         let mut rounds = 0u32;
         let mut prompt_tokens = 0u32;
@@ -176,6 +180,7 @@ impl<'a> Agent<'a> {
         let mut retried_without_thinking = false;
         let mut repaired_tool_call = false;
         let mut retry_instruction = "";
+        let mut plan_nudges = 0u32;
 
         let outcome = loop {
             if self.cancelled() {
@@ -221,6 +226,7 @@ impl<'a> Agent<'a> {
                         message: partial.clone(),
                     });
                     session.push(partial);
+                    self.checkpoint(session);
                 }
                 break StopReason::Cancelled;
             }
@@ -247,6 +253,21 @@ impl<'a> Agent<'a> {
             }
 
             if parsed.calls.is_empty() {
+                if self.config.effort == Effort::Task && plan_nudges < 3 && !plan_complete(session) {
+                    plan_nudges += 1;
+                    retry_instruction = if session.plan.is_empty() {
+                        "This is a Task effort turn. Start by calling update_plan with a JSON checklist for the user's request, then work through it. Do not answer yet."
+                    } else {
+                        "The task checklist is not complete. Continue with the next pending or running step, use tools to verify the result, then call update_plan. Do not give a final answer yet."
+                    };
+                    self.events.emit(AgentEvent::GenerationReset {
+                        turn_id: turn_id.clone(),
+                    });
+                    self.events.emit(AgentEvent::Notice {
+                        message: "Continuing the task checklist.".to_string(),
+                    });
+                    continue;
+                }
                 if parsed.content.trim().is_empty() {
                     // Reasoning ran long and the answer never arrived: retry once
                     // with reasoning switched off, which usually fixes it.
@@ -274,6 +295,7 @@ impl<'a> Agent<'a> {
                     message: message.clone(),
                 });
                 session.push(message);
+                self.checkpoint(session);
                 break StopReason::Answered;
             }
 
@@ -297,6 +319,7 @@ impl<'a> Agent<'a> {
                 message: assistant.clone(),
             });
             session.push(assistant);
+            self.checkpoint(session);
 
             for call in &calls {
                 if !tools_for_prompt.iter().any(|tool| tool.name == call.name) {
@@ -344,6 +367,7 @@ impl<'a> Agent<'a> {
                     message: message.clone(),
                 });
                 session.push(message);
+                self.checkpoint(session);
                 break StopReason::ToolBudget;
             }
         };
@@ -448,7 +472,17 @@ impl<'a> Agent<'a> {
             risk: risk_label,
         });
 
-        let outcome = self.tools.execute(call).await;
+        let outcome = if call.name == "update_plan" {
+            apply_plan(session, call)
+        } else {
+            self.tools.execute(call).await
+        };
+        if call.name == "update_plan" && outcome.ok {
+            self.events.emit(AgentEvent::PlanUpdated {
+                turn_id: turn_id.to_string(),
+                steps: session.plan.clone(),
+            });
+        }
         self.events.emit(AgentEvent::ToolCallFinished {
             turn_id: turn_id.to_string(),
             call_id: call.id.clone(),
@@ -477,6 +511,7 @@ impl<'a> Agent<'a> {
             message: message.clone(),
         });
         session.push(message);
+        self.checkpoint(session);
     }
 
     /// Generates, trimming old turns if the prompt does not fit.
@@ -535,6 +570,23 @@ impl<'a> Agent<'a> {
             system.push_str("\n\n");
             system.push_str(system_suffix);
         }
+        if !session.plan.is_empty() {
+            system.push_str("\n\nCurrent task checklist (keep it updated with update_plan):\n");
+            for step in &session.plan {
+                system.push_str(&format!(
+                    "{}. [{}] {}{}\n",
+                    step.id + 1,
+                    match step.status {
+                        PlanStatus::Pending => "pending",
+                        PlanStatus::Running => "running",
+                        PlanStatus::Done => "done",
+                        PlanStatus::Blocked => "blocked",
+                    },
+                    step.title,
+                    if step.note.is_empty() { String::new() } else { format!(" ({})", step.note) }
+                ));
+            }
+        }
         let rendered = prompt::render(&PromptOptions {
             system: &system,
             tools,
@@ -554,12 +606,80 @@ impl<'a> Agent<'a> {
         }
     }
 
+    /// Saves a durable checkpoint when the host supplied a store. Checkpoint
+    /// failures are reported but do not abort the turn; the final save still
+    /// decides whether the command succeeds.
+    fn checkpoint(&self, session: &Session) {
+        if let Some(store) = self.store {
+            if let Err(err) = store.save(session) {
+                self.events.emit(AgentEvent::Notice {
+                    message: format!("Could not save a task checkpoint: {err}"),
+                });
+            }
+        }
+    }
+
     fn cancelled(&self) -> bool {
         self.backend
             .cancel_flag()
             .map(|flag| flag.load(Ordering::Relaxed))
             .unwrap_or(false)
     }
+}
+
+fn plan_complete(session: &Session) -> bool {
+    !session.plan.is_empty()
+        && session
+            .plan
+            .iter()
+            .all(|step| matches!(step.status, PlanStatus::Done | PlanStatus::Blocked))
+}
+
+fn apply_plan(session: &mut Session, call: &ToolCall) -> tools::ToolOutcome {
+    let Some(raw) = call.arg("steps") else {
+        return tools::ToolOutcome::fail("missing steps", "Error: `steps` is required.");
+    };
+    let value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(value) => value,
+        Err(err) => return tools::ToolOutcome::fail("invalid plan", format!("Error: {err}")),
+    };
+    let Some(items) = value.as_array() else {
+        return tools::ToolOutcome::fail("invalid plan", "Error: `steps` must be a JSON array.");
+    };
+    if items.is_empty() || items.len() > 50 {
+        return tools::ToolOutcome::fail("invalid plan", "Error: provide between 1 and 50 steps.");
+    }
+    let mut steps = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        let Some(title) = item.get("title").and_then(|v| v.as_str()).map(str::trim) else {
+            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} needs a title."));
+        };
+        if title.is_empty() || title.chars().count() > 200 {
+            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} title must be 1-200 characters."));
+        }
+        let status = match item.get("status").and_then(|v| v.as_str()).unwrap_or("pending") {
+            "pending" => PlanStatus::Pending,
+            "running" => PlanStatus::Running,
+            "done" => PlanStatus::Done,
+            "blocked" => PlanStatus::Blocked,
+            other => return tools::ToolOutcome::fail("invalid plan", format!("Error: unknown status `{other}`.")),
+        };
+        let note = item.get("note").and_then(|v| v.as_str()).unwrap_or("");
+        if note.chars().count() > 500 {
+            return tools::ToolOutcome::fail("invalid plan", format!("Error: step {index} note is too long."));
+        }
+        steps.push(PlanStep { id: index, title: title.to_string(), status, note: note.to_string() });
+    }
+    let running = steps.iter().filter(|step| step.status == PlanStatus::Running).count();
+    if running > 1 {
+        return tools::ToolOutcome::fail("invalid plan", "Error: keep at most one step running at a time.");
+    }
+    session.plan = steps;
+    let done = session.plan.iter().filter(|step| step.status == PlanStatus::Done).count();
+    tools::ToolOutcome::ok(
+        format!("plan {done}/{}", session.plan.len()),
+        format!("Checklist updated: {done}/{} steps done.", session.plan.len()),
+    )
 }
 
 /// Encodes the first image a tool produced as a data URL for the UI.

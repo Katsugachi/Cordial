@@ -1337,3 +1337,14 @@ dialog::backdrop {
 .skill-import { display: inline-flex; align-items: center; margin-top: 12px; cursor: pointer; }
 .skill-import:focus-within { outline: 3px solid var(--blue); outline-offset: 3px; }
 #editor-error:empty { display: none; }
+
+/* Task checklist */
+.plan { border: 1px solid var(--line); background: var(--note); border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; }
+.plan__head { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
+.plan__steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plan__step { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 8px; align-items: start; font-size: 13px; }
+.plan__mark { color: var(--muted); }
+.plan__step[data-status="done"] .plan__mark { color: var(--blue); }
+.plan__step[data-status="blocked"] .plan__mark { color: var(--brand); }
+.plan__step[data-status="running"] .plan__title { font-weight: 600; }
+.plan__note { display: block; color: var(--muted); font-size: 12px; }

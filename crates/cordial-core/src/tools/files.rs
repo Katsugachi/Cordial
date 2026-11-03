@@ -161,41 +161,72 @@ pub fn read_text_bounded(path: &Path, max_chars: usize) -> Result<String, CoreEr
 }
 
 /// Resolves a user-supplied relative path inside `workspace`.
-pub fn resolve(workspace: &Path, raw: &str) -> Result<PathBuf, CoreError> {
+///
+/// The returned path is canonicalised when it already exists. Symlink
+/// components are refused rather than followed, so a link inside the workspace
+/// cannot be used to read or overwrite a file outside it.
+pub(crate) fn resolve(workspace: &Path, raw: &str) -> Result<PathBuf, CoreError> {
     let trimmed = raw.trim().trim_matches('"').trim();
+    if trimmed.is_empty() {
+        return workspace
+            .canonicalize()
+            .map_err(|err| CoreError::Other(format!("workspace is not readable: {err}")));
+    }
+    if trimmed.chars().any(|ch| ch.is_control() || ch == '\0') {
+        return Err(CoreError::Other(
+            "control characters are not allowed in paths".to_string(),
+        ));
+    }
     let candidate = Path::new(trimmed);
     if candidate.is_absolute() {
         return Err(CoreError::Other(
             "absolute paths are not allowed; use a path inside the workspace".to_string(),
         ));
     }
-    let joined = normalise(&workspace.join(candidate));
-    let root = normalise(
-        &workspace
-            .canonicalize()
-            .unwrap_or_else(|_| workspace.to_path_buf()),
-    );
-    if !joined.starts_with(&root) {
-        return Err(CoreError::Other(
-            "that path is outside the workspace folder".to_string(),
-        ));
-    }
-    Ok(joined)
-}
-
-/// Lexically resolves `.` and `..` without touching the filesystem.
-fn normalise(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
+    let root = workspace
+        .canonicalize()
+        .map_err(|err| CoreError::Other(format!("workspace is not readable: {err}")))?;
+    let mut joined = root.clone();
+    for component in candidate.components() {
         match component {
-            Component::ParentDir => {
-                out.pop();
+            Component::Normal(part) => {
+                joined.push(part);
+                if let Ok(meta) = std::fs::symlink_metadata(&joined) {
+                    if meta.file_type().is_symlink() {
+                        return Err(CoreError::Other(
+                            "symlinks are not allowed in workspace paths".to_string(),
+                        ));
+                    }
+                }
             }
             Component::CurDir => {}
-            other => out.push(other.as_os_str()),
+            Component::ParentDir => {
+                if joined == root {
+                    return Err(CoreError::Other(
+                        "that path is outside the workspace folder".to_string(),
+                    ));
+                }
+                joined.pop();
+            }
+            _ => {
+                return Err(CoreError::Other(
+                    "that path is outside the workspace folder".to_string(),
+                ));
+            }
         }
     }
-    out
+    if joined.exists() {
+        let canonical = joined
+            .canonicalize()
+            .map_err(|err| CoreError::Other(format!("path is not readable: {err}")))?;
+        if !canonical.starts_with(&root) {
+            return Err(CoreError::Other(
+                "that path is outside the workspace folder".to_string(),
+            ));
+        }
+        return Ok(canonical);
+    }
+    Ok(joined)
 }
 
 fn display_relative(workspace: &Path, path: &Path) -> String {
@@ -251,6 +282,20 @@ mod tests {
         std::fs::write(&file, [0u8, 1, 2, 3, 0, 9]).unwrap();
         assert!(read_text_bounded(&file, 1000).is_err());
         std::fs::remove_dir_all(&workspace).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_escape_is_refused() {
+        let workspace = temp_workspace("symlink");
+        let outside = workspace.parent().unwrap().join(format!("outside-{}", crate::util::now_ms()));
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), "secret").unwrap();
+        std::os::unix::fs::symlink(&outside, workspace.join("link")).unwrap();
+        assert!(resolve(&workspace, "link/secret.txt").is_err());
+        assert!(resolve(&workspace, "link").is_err());
+        std::fs::remove_dir_all(&workspace).ok();
+        std::fs::remove_dir_all(&outside).ok();
     }
 
     #[test]

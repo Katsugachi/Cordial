@@ -265,6 +265,12 @@ export function applyEvent(state: AppState, event: AgentEvent): AppState {
       };
     }
 
+    case "plan_updated": {
+      if (!state.turn || state.turn.id !== event.turn_id) return state;
+      const session = state.session ? { ...state.session, plan: event.steps } : state.session;
+      return { ...state, session };
+    }
+
     case "tool_message": {
       const session = appendMessage(state.session, event.message);
       const tools = state.turn

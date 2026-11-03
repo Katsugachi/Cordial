@@ -158,6 +158,25 @@ impl Message {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PlanStatus {
+    #[default]
+    Pending,
+    Running,
+    Done,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanStep {
+    pub id: usize,
+    pub title: String,
+    pub status: PlanStatus,
+    #[serde(default)]
+    pub note: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
@@ -165,6 +184,8 @@ pub struct Session {
     pub created_at: i64,
     pub updated_at: i64,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub plan: Vec<PlanStep>,
 }
 
 impl Default for Session {
@@ -182,6 +203,7 @@ impl Session {
             created_at: now,
             updated_at: now,
             messages: Vec::new(),
+            plan: Vec::new(),
         }
     }
 

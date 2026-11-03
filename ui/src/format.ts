@@ -61,7 +61,7 @@ export function excerpt(text: string, limit = 160): string {
 export function toolFamily(name: string): "search" | "browser" | "files" | "write" {
   if (name === "web_search") return "search";
   if (name.startsWith("browser_")) return "browser";
-  if (name === "write_file") return "write";
+  if (name === "write_file" || name === "docx_edit" || name === "docx_create") return "write";
   return "files";
 }
 
@@ -86,6 +86,16 @@ export function toolLabel(name: string): string {
       return "List files";
     case "write_file":
       return "Write file";
+    case "run_command":
+      return "Run command";
+    case "docx_read":
+      return "Read Word file";
+    case "docx_edit":
+      return "Edit Word file";
+    case "docx_create":
+      return "Create Word file";
+    case "update_plan":
+      return "Update checklist";
     default:
       return name;
   }

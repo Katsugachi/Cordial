@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::session::Message;
+use crate::session::{Message, PlanStep};
 
 /// Why a turn stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +93,10 @@ pub enum AgentEvent {
     ToolMessage {
         turn_id: String,
         message: Message,
+    },
+    PlanUpdated {
+        turn_id: String,
+        steps: Vec<PlanStep>,
     },
     TurnFinished {
         turn_id: String,

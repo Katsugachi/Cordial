@@ -13,6 +13,10 @@ anyhow.workspace = true
 base64.workspace = true
 dirs.workspace = true
 futures-util.workspace = true
+quick-xml = "0.42"
+regex = "1"
+shlex = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 reqwest.workspace = true
 scraper.workspace = true
 serde.workspace = true

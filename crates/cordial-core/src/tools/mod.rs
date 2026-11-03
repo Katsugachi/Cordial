@@ -6,6 +6,8 @@
 //! user must approve the call first.
 
 pub mod browser;
+pub mod commands;
+pub mod docx;
 pub mod files;
 pub mod htmltext;
 pub mod web;
@@ -175,6 +177,64 @@ pub fn specs(web_enabled: bool) -> Vec<ToolSpec> {
         risk: Risk::Write,
     });
 
+    out.push(ToolSpec {
+        name: "run_command",
+        description: "Run one read-only workspace command: grep, find, ls, cat, head, tail, wc, stat or pwd. No shell, writes, network or destructive commands.",
+        parameters: json!({
+            "type": "object",
+            "properties": { "command": string_param("A single command, for example: grep -n TODO notes.txt") },
+            "required": ["command"]
+        }),
+        risk: Risk::Read,
+    });
+    out.push(ToolSpec {
+        name: "docx_read",
+        description: "Read a DOCX file as numbered paragraphs [p0], [p1], ...",
+        parameters: json!({
+            "type": "object",
+            "properties": { "path": string_param("DOCX path relative to the workspace") },
+            "required": ["path"]
+        }),
+        risk: Risk::Read,
+    });
+    out.push(ToolSpec {
+        name: "docx_edit",
+        description: "Replace selected paragraphs in a DOCX copy. edits is a JSON array of {paragraph, text}.",
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "path": string_param("Source DOCX path"),
+                "edits": string_param("JSON array, for example [{\"paragraph\":1,\"text\":\"Answer\"}]"),
+                "output": string_param("Optional output DOCX path; defaults to <name>.edited.docx")
+            },
+            "required": ["path", "edits"]
+        }),
+        risk: Risk::Write,
+    });
+    out.push(ToolSpec {
+        name: "docx_create",
+        description: "Create a simple DOCX file from plain text lines.",
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "path": string_param("Output DOCX path"),
+                "content": string_param("Plain text; each line becomes a paragraph")
+            },
+            "required": ["path", "content"]
+        }),
+        risk: Risk::Write,
+    });
+    out.push(ToolSpec {
+        name: "update_plan",
+        description: "Create or update the visible task checklist. steps is a JSON array of {title, status, note}. status: pending, running, done, blocked.",
+        parameters: json!({
+            "type": "object",
+            "properties": { "steps": string_param("JSON array of checklist steps") },
+            "required": ["steps"]
+        }),
+        risk: Risk::Read,
+    });
+
     out
 }
 
@@ -274,6 +334,11 @@ impl ToolRuntime {
             "read_file" => files::read(self, call),
             "list_files" => files::list(self, call),
             "write_file" => files::write(self, call),
+            "run_command" => commands::run(self, call).await,
+            "docx_read" => docx::read(self, call),
+            "docx_edit" => docx::edit(self, call),
+            "docx_create" => docx::create(self, call),
+            "update_plan" => ToolOutcome::fail("plan handled by agent", "Error: update_plan must be handled by the agent loop."),
             other => ToolOutcome::fail(
                 format!("unknown tool: {other}"),
                 format!(
@@ -422,6 +487,9 @@ impl ToolRuntime {
 
     /// Reads a user attachment as text (used for file inputs).
     pub fn read_attachment_text(&self, path: &std::path::Path, max_chars: usize) -> Option<String> {
+        if path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.eq_ignore_ascii_case("docx")).unwrap_or(false) {
+            return docx::attachment_text(path, max_chars).ok();
+        }
         files::read_text_bounded(path, max_chars).ok()
     }
 }

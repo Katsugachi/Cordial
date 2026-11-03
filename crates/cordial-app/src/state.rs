@@ -262,6 +262,7 @@ impl AppState {
                 approvals: &self.approvals,
                 events: &self.events,
                 config,
+                store: Some(store),
             };
             agent.run(&mut session, text, attachments).await
         };

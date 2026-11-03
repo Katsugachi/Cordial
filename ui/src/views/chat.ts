@@ -2,7 +2,7 @@ import { escapeHtml, excerpt, relativeDate, toolFamily, toolLabel } from "../for
 import { icons, logoMark } from "../icons";
 import { renderMarkdown } from "../markdown";
 import type { AppState, ToolView } from "../store";
-import type { Message } from "../types";
+import type { Message, PlanStep } from "../types";
 
 const STATUS_LABEL: Record<ToolView["status"], string> = {
   running: "Running",
@@ -183,10 +183,20 @@ export function chatHtml(state: AppState): string {
     );
   }
 
+  const plan = session?.plan?.length ? planCard(session.plan) : "";
   const content = latestUserIndex < 0
-    ? blocks.join("")
-    : `${blocks.slice(0, latestUserIndex).join("")}<div class="messages__turn" data-latest-turn>${blocks.slice(latestUserIndex).join("")}</div>`;
+    ? plan + blocks.join("")
+    : `${blocks.slice(0, latestUserIndex).join("")}<div class="messages__turn" data-latest-turn>${plan}${blocks.slice(latestUserIndex).join("")}</div>`;
   return `<div class="messages" id="messages" tabindex="0" aria-label="Conversation"><div class="messages__inner">${content}</div></div>`;
+}
+
+function planCard(steps: PlanStep[]): string {
+  const done = steps.filter((step) => step.status === "done" || step.status === "blocked").length;
+  const rows = steps.map((step) => `<li class="plan__step" data-status="${step.status}">
+    <span class="plan__mark" aria-hidden="true">${step.status === "done" ? "✓" : step.status === "blocked" ? "!" : step.status === "running" ? "→" : "○"}</span>
+    <span class="plan__title">${escapeHtml(step.title)}${step.note ? `<span class="plan__note">${escapeHtml(step.note)}</span>` : ""}</span>
+  </li>`).join("");
+  return `<section class="plan" aria-label="Task checklist"><div class="plan__head"><span>Task checklist</span><span>${done}/${steps.length}</span></div><ol class="plan__steps">${rows}</ol></section>`;
 }
 
 function approvalHtml(tool: ToolView): string {

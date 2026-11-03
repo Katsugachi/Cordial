@@ -1,7 +1,7 @@
 // Types mirrored from `cordial-core` (serde names must match exactly).
 
 export type PermissionMode = "auto" | "manual";
-export type Effort = "low" | "medium" | "high";
+export type Effort = "low" | "medium" | "high" | "task";
 
 export interface Settings {
   context_tokens: number;
@@ -69,12 +69,22 @@ export interface Message {
   created_at: number;
 }
 
+export type PlanStatus = "pending" | "running" | "done" | "blocked";
+
+export interface PlanStep {
+  id: number;
+  title: string;
+  status: PlanStatus;
+  note: string;
+}
+
 export interface Session {
   id: string;
   title: string;
   created_at: number;
   updated_at: number;
   messages: Message[];
+  plan?: PlanStep[];
 }
 
 export interface SessionSummary {
@@ -135,6 +145,7 @@ export type AgentEvent =
   | { type: "tool_call_denied"; turn_id: string; call_id: string; name: string }
   | { type: "assistant_message"; turn_id: string; message: Message }
   | { type: "tool_message"; turn_id: string; message: Message }
+  | { type: "plan_updated"; turn_id: string; steps: PlanStep[] }
   | {
       type: "turn_finished";
       turn_id: string;
@@ -158,11 +169,11 @@ export type AgentEvent =
   | { type: "download_finished"; file: string; path: string }
   | { type: "download_failed"; file: string; message: string };
 
-export const EFFORTS: Effort[] = ["low", "medium", "high"];
+export const EFFORTS: Effort[] = ["low", "medium", "high", "task"];
 export const PERMISSION_MODES: PermissionMode[] = ["auto", "manual"];
 
 export function effortLabel(effort: Effort): string {
-  return effort === "low" ? "Low" : effort === "medium" ? "Medium" : "High";
+  return effort === "low" ? "Low" : effort === "medium" ? "Medium" : effort === "high" ? "High" : "Task";
 }
 
 export function permissionLabel(mode: PermissionMode): string {

@@ -20,6 +20,8 @@ export function sidebarHtml(state: AppState): string {
     <ul class="session-list">${rows || `<li class="sidebar__empty">No chats yet.</li>`}</ul>
   </aside>
   <div class="sidebar__footer sidebar__tools">
+    <button class="ghost-button" data-action="choose-folder" ${state.busy ? "disabled" : ""} title="${escapeHtml(state.workspace || "Default workspace")}">Working folder</button>
+    ${state.settings.workspace_dir ? `<button class="ghost-button" data-action="reset-folder" ${state.busy ? "disabled" : ""}>Use default folder</button>` : ""}
     <button class="ghost-button" data-action="open-memory" ${state.busy ? "disabled" : ""}>Memory</button>
     <button class="ghost-button" data-action="open-skill" ${state.busy ? "disabled" : ""}>Skills</button>
     <button class="ghost-button" data-action="remove-model" ${state.busy ? "disabled" : ""}>Remove downloaded model</button>

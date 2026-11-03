@@ -34,6 +34,8 @@ pub enum Effort {
     Medium,
     /// Thorough: more tool calls, deeper searches, fuller answers.
     High,
+    /// Long-horizon autonomous work with a visible checklist.
+    Task,
 }
 
 impl Effort {
@@ -42,6 +44,7 @@ impl Effort {
             Effort::Low => "Low",
             Effort::Medium => "Medium",
             Effort::High => "High",
+            Effort::Task => "Task",
         }
     }
 
@@ -51,6 +54,7 @@ impl Effort {
             Effort::Low => 3,
             Effort::Medium => 8,
             Effort::High => 16,
+            Effort::Task => 96,
         }
     }
 
@@ -60,6 +64,7 @@ impl Effort {
             Effort::Low => 3,
             Effort::Medium => 5,
             Effort::High => 8,
+            Effort::Task => 8,
         }
     }
 
@@ -72,6 +77,7 @@ impl Effort {
             Effort::Low => 512,
             Effort::Medium => 1_536,
             Effort::High => 3_072,
+            Effort::Task => 4_096,
         }
     }
 
@@ -81,6 +87,7 @@ impl Effort {
             Effort::Low => 4_000,
             Effort::Medium => 10_000,
             Effort::High => 24_000,
+            Effort::Task => 32_000,
         }
     }
 
@@ -90,6 +97,7 @@ impl Effort {
             Effort::Low => 0.1,
             Effort::Medium => 0.1,
             Effort::High => 0.2,
+            Effort::Task => 0.1,
         }
     }
 
@@ -104,6 +112,9 @@ impl Effort {
             }
             Effort::High => {
                 "Effort: high. Answer thoroughly but stay concise. Prefer two sources when facts matter."
+            }
+            Effort::Task => {
+                "Effort: task. Work autonomously through a visible checklist. Call update_plan first, keep one step running, verify outputs, mark steps done, and report only when the plan is complete or blocked."
             }
         }
     }
@@ -182,6 +193,7 @@ mod tests {
     fn effort_budgets_grow_monotonically() {
         assert!(Effort::Low.max_tool_rounds() < Effort::Medium.max_tool_rounds());
         assert!(Effort::Medium.max_tool_rounds() < Effort::High.max_tool_rounds());
+        assert!(Effort::High.max_tool_rounds() < Effort::Task.max_tool_rounds());
         assert!(Effort::Low.max_output_tokens() < Effort::High.max_output_tokens());
     }
 
