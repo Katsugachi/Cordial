@@ -263,37 +263,78 @@ impl Live {
 #[ignore = "runs a generated multi-step task against the real model"]
 async fn generated_complex_tasks_verify_artifacts() {
     use cordial_core::session::{ToolArgument, ToolCall};
-    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    let Some(mut live) = Live::boot().await else {
+        panic!("model unavailable")
+    };
     let seed = (cordial_core::util::now_ms() as u64) % 9;
     let a = 11 + seed;
     let b = 23 + seed;
     let c = 37 + seed;
-    std::fs::write(live.workspace.join("orders.csv"), format!("item,units,price\nA,{a},2\nB,{b},3\nC,{c},4\n")).unwrap();
+    std::fs::write(
+        live.workspace.join("orders.csv"),
+        format!("item,units,price\nA,{a},2\nB,{b},3\nC,{c},4\n"),
+    )
+    .unwrap();
     let (session, answer) = live.turn(Effort::Task, false,
         "Read orders.csv. Calculate units times price for each row and the grand total. Write a report to totals.txt containing each item and its total, plus the grand total. Verify the file and tell me when finished.", vec![]).await;
     let artifact = std::fs::read_to_string(live.workspace.join("totals.txt")).unwrap_or_default();
     let expected = [a * 2, b * 3, c * 4, a * 2 + b * 3 + c * 4];
-    let missing: Vec<_> = expected.iter().filter(|v| !artifact.contains(&v.to_string())).collect();
+    let missing: Vec<_> = expected
+        .iter()
+        .filter(|v| !artifact.contains(&v.to_string()))
+        .collect();
     eprintln!("EVAL csv artifact={artifact:?}, expected={expected:?}, missing={missing:?}, plan={:?}, answer={answer:?}", session.plan);
 
     let call = ToolCall { id: "fixture".into(), name: "docx_create".into(), arguments: vec![
         ToolArgument { name: "path".into(), value: "worksheet.docx".into() },
         ToolArgument { name: "content".into(), value: format!("Question 1: What is {a} plus {b}?\nAnswer: blank\nQuestion 2: What is {c} minus {a}?\nAnswer: blank") },
     ]};
-    assert!(live.runtime.execute(&call).await.ok, "could not create DOCX fixture");
+    assert!(
+        live.runtime.execute(&call).await.ok,
+        "could not create DOCX fixture"
+    );
     let (word_session, word_answer) = live.turn(Effort::Task, false,
         "Read worksheet.docx, answer both questions and save a completed Word document in the workspace. Verify the output and report its filename.", vec![]).await;
     let mut found = false;
     for entry in std::fs::read_dir(&live.workspace).unwrap().flatten() {
         let path = entry.path();
-        if path.extension().and_then(|x| x.to_str()) != Some("docx") || path.ends_with("worksheet.docx") { continue; }
-        let call = ToolCall { id: "verify".into(), name: "docx_read".into(), arguments: vec![ToolArgument { name: "path".into(), value: entry.file_name().to_string_lossy().into_owned() }] };
+        if path.extension().and_then(|x| x.to_str()) != Some("docx")
+            || path.ends_with("worksheet.docx")
+        {
+            continue;
+        }
+        let call = ToolCall {
+            id: "verify".into(),
+            name: "docx_read".into(),
+            arguments: vec![ToolArgument {
+                name: "path".into(),
+                value: entry.file_name().to_string_lossy().into_owned(),
+            }],
+        };
         let out = live.runtime.execute(&call).await;
-        eprintln!("EVAL docx {} ok={} text={:?}", path.display(), out.ok, out.text);
-        if out.ok && out.text.contains(&(a+b).to_string()) && out.text.contains(&(c-a).to_string()) { found = true; }
+        eprintln!(
+            "EVAL docx {} ok={} text={:?}",
+            path.display(),
+            out.ok,
+            out.text
+        );
+        if out.ok
+            && out.text.contains(&(a + b).to_string())
+            && out.text.contains(&(c - a).to_string())
+        {
+            found = true;
+        }
     }
-    eprintln!("EVAL docx expected={} and {}, found={found}, plan={:?}, answer={word_answer:?}", a+b, c-a, word_session.plan);
-    assert!(missing.is_empty(), "CSV artifact missing expected numbers: {missing:?}");
+    eprintln!(
+        "EVAL docx expected={} and {}, found={found}, plan={:?}, answer={word_answer:?}",
+        a + b,
+        c - a,
+        word_session.plan
+    );
+    assert!(
+        missing.is_empty(),
+        "CSV artifact missing expected numbers: {missing:?}"
+    );
     assert!(found, "no completed DOCX artifact contained both answers");
 }
 
