@@ -275,7 +275,7 @@ fn edit_docx(path: &Path, output: &Path, edits: &[Edit]) -> Result<usize, String
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    let names: Vec<String> = archive.file_names().map(|name| name.to_string()).collect();
+    let names: Vec<String> = archive.file_names().map(|name| name.map(|value| value.into_owned()).map_err(|err| err.to_string())).collect::<Result<_, _>>()?;
     let mut total = updated.len() as u64;
     for name in &names {
         if name == "word/document.xml" {
