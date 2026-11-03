@@ -12,7 +12,10 @@ combination deserves a written threat model rather than good intentions.
 | `browser_open` | Launches the installed Chrome/Chromium/Edge headless | Auto: allowed |
 | `browser_click`, `browser_type`, `browser_view` | Interacts with the current page | Auto: allowed |
 | `read_file`, `list_files` | Reads inside the workspace folder | Auto: allowed |
-| `write_file` | Writes inside the workspace folder | Always asks first |
+| `write_file`, `docx_edit`, `docx_create` | Writes inside the workspace folder | Auto: asks once per tool, then remembers the grant |
+| `run_command` | Built-in read-only operations in workspace, no shell | Auto: allowed |
+| `docx_read` | Reads DOCX paragraphs in workspace | Auto: allowed |
+| `update_plan` | Updates the conversation checklist | Auto: allowed |
 | unknown tool | — | Treated as a write, asks first |
 
 `PermissionMode::Manual` asks before every call. `PermissionMode::Auto` asks only
@@ -21,8 +24,10 @@ for writes, and remembers a grant for the rest of the session.
 ## Boundaries that are enforced, not suggested
 
 - **Filesystem.** `tools/files.rs` refuses absolute paths, refuses `..`
-  traversal after lexical resolution, and re-checks the canonicalised parent, so a
-  symlink cannot walk out of the workspace. Reads are capped at 1.5 MB and
+  traversal and rejects existing symlink components. These checks are path-based,
+  not an OS sandbox: another local process changing paths concurrently can race
+  them. Use a trusted workspace and do not treat this as isolation from a
+  malicious local user. Reads are capped at 1.5 MB and
   rejected when the first 8 KB look binary.
 - **Network.** Only `http` and `https` URLs are fetched. Redirects are limited to
   8 hops. There is no request to `file://`, `localhost` via the tools, or any
@@ -80,3 +85,12 @@ llama.cpp runs in-process; there is no inference server listening on a port.
 - PDFs are not parsed. The fetch tool says so rather than returning binary noise.
 - The browser driver speaks CDP directly and targets Chromium-family browsers
   only. Safari and Firefox are not supported.
+
+## Task mode limitations
+
+Task mode is experimental. The checklist reflects the model’s own reports and is
+not proof of correctness. Work stops when the app exits, when its budget runs
+out, or when the model fails; checkpointing does not automatically resume it.
+DOCX support handles a bounded subset of WordprocessingML, not all document
+features. Review output documents and back up originals. Real-model held-out
+complex-task testing is still required before claiming reliable completion.

@@ -292,7 +292,12 @@ impl<'a> Agent<'a> {
                     }
                     break StopReason::EmptyAnswer;
                 }
-                let message = Message::assistant(parsed.content, parsed.thinking, vec![]);
+                let content = if self.config.effort == Effort::Task && !plan_complete(session) {
+                    format!("Task incomplete: the checklist still has unfinished steps or was not created.\n\n{}", parsed.content)
+                } else {
+                    parsed.content
+                };
+                let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
                     message: message.clone(),
