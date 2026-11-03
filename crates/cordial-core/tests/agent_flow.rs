@@ -531,12 +531,38 @@ async fn task_plan_progress_is_recorded() {
     let mut session = Session::new();
     let open = "<tool_call><function=update_plan><parameter=steps>";
     let close = "</parameter></function></tool_call>";
-    let first = format!("{}{}{}", open, r#"[{"title":"Read notes","status":"running"},{"title":"Report","status":"pending"}]"#, close);
-    let last = format!("{}{}{}", open, r#"[{"title":"Read notes","status":"done"},{"title":"Report","status":"done"}]"#, close);
+    let first = format!(
+        "{}{}{}",
+        open,
+        r#"[{"title":"Read notes","status":"running"},{"title":"Report","status":"pending"}]"#,
+        close
+    );
+    let last = format!(
+        "{}{}{}",
+        open,
+        r#"[{"title":"Read notes","status":"done"},{"title":"Report","status":"done"}]"#,
+        close
+    );
     let script = vec![first.as_str(), last.as_str(), "Done."];
-    let (result, events) = run_turn(&fixture, script, config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Task, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert_eq!(session.plan.len(), 2);
-    assert!(session.plan.iter().all(|s| s.status == cordial_core::session::PlanStatus::Done));
-    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::PlanUpdated { .. })).count(), 2);
+    assert!(session
+        .plan
+        .iter()
+        .all(|s| s.status == cordial_core::session::PlanStatus::Done));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e, AgentEvent::PlanUpdated { .. }))
+            .count(),
+        2
+    );
 }
