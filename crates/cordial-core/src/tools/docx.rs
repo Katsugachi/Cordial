@@ -38,7 +38,10 @@ pub fn read(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         Ok(paragraphs) => {
             let start = call.int("start").unwrap_or(0);
             if start < 0 || start as usize > paragraphs.len() {
-                return ToolOutcome::fail("invalid start", "Error: start must be a valid paragraph index.");
+                return ToolOutcome::fail(
+                    "invalid start",
+                    "Error: start must be a valid paragraph index.",
+                );
             }
             let count = call.int("count").unwrap_or(100).clamp(1, 500) as usize;
             let start = start as usize;
@@ -56,11 +59,17 @@ pub fn read(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
                 text.push_str(&line);
                 next = index + 1;
             }
-            text.push_str(&format!("\nParagraphs {start}..{next} of {}.", paragraphs.len()));
+            text.push_str(&format!(
+                "\nParagraphs {start}..{next} of {}.",
+                paragraphs.len()
+            ));
             if next < paragraphs.len() {
                 text.push_str(&format!(" Continue with docx_read start={next}."));
             }
-            ToolOutcome::ok(format!("read {} of {} paragraphs", next - start, paragraphs.len()), text)
+            ToolOutcome::ok(
+                format!("read {} of {} paragraphs", next - start, paragraphs.len()),
+                text,
+            )
         }
         Err(err) => ToolOutcome::fail("docx read failed", format!("Error: {err}")),
     }
@@ -553,7 +562,10 @@ mod tests {
         let source = dir.join("source.docx");
         create_docx(&source, "Original").unwrap();
         let original = std::fs::read(&source).unwrap();
-        let edits = vec![Edit { paragraph: 0, text: "New".into() }];
+        let edits = vec![Edit {
+            paragraph: 0,
+            text: "New".into(),
+        }];
         assert!(edit_docx(&source, &source, &edits).is_err());
         assert_eq!(std::fs::read(&source).unwrap(), original);
         let output = dir.join("output.docx");
@@ -569,12 +581,30 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("cordial-docx-pages-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         create_docx(&dir.join("input.docx"), "one\ntwo\nthree").unwrap();
-        let runtime = ToolRuntime::new(dir.clone(), dir.join("scratch"), crate::settings::Effort::Medium).unwrap();
-        let call = ToolCall { id: "test".into(), name: "docx_read".into(), arguments: vec![
-            ToolArgument { name: "path".into(), value: "input.docx".into() },
-            ToolArgument { name: "start".into(), value: "1".into() },
-            ToolArgument { name: "count".into(), value: "1".into() },
-        ] };
+        let runtime = ToolRuntime::new(
+            dir.clone(),
+            dir.join("scratch"),
+            crate::settings::Effort::Medium,
+        )
+        .unwrap();
+        let call = ToolCall {
+            id: "test".into(),
+            name: "docx_read".into(),
+            arguments: vec![
+                ToolArgument {
+                    name: "path".into(),
+                    value: "input.docx".into(),
+                },
+                ToolArgument {
+                    name: "start".into(),
+                    value: "1".into(),
+                },
+                ToolArgument {
+                    name: "count".into(),
+                    value: "1".into(),
+                },
+            ],
+        };
         let result = read(&runtime, &call);
         assert!(result.ok);
         assert!(result.text.contains("[p1] two"));
