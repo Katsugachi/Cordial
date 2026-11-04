@@ -385,7 +385,9 @@ async fn generated_complex_tasks_verify_artifacts() {
 #[tokio::test]
 #[ignore = "uses the real model and live web search"]
 async fn research_worksheets_architecture_and_english() {
-    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    let Some(mut live) = Live::boot().await else {
+        panic!("model unavailable")
+    };
     let seed = cordial_core::util::now_ms() % 5;
     let width = 12 + seed;
     let length = 19 + seed;
@@ -398,24 +400,71 @@ async fn research_worksheets_architecture_and_english() {
         "English worksheet\n1. In the sentence 'The wind whispered secrets to the street', identify and explain the figure of speech.\n2. In 'The library was a lighthouse in the storm', identify and explain the figure of speech.\n3. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n").unwrap();
     let (english, english_answer) = live.turn(Effort::Task, true,
         "Complete every question in english.txt. Research factual claims, cite source URLs, and explain each answer.", vec![]).await;
-    let names = |s: &Session| -> Vec<String> { s.messages.iter().flat_map(|m| &m.tool_calls).map(|c| c.name.clone()).collect() };
+    let names = |s: &Session| -> Vec<String> {
+        s.messages
+            .iter()
+            .flat_map(|m| &m.tool_calls)
+            .map(|c| c.name.clone())
+            .collect()
+    };
     let arch_calls = names(&architecture);
     let english_calls = names(&english);
     eprintln!("EVAL architecture answer={arch_answer:?}, plan={:?}, calls={arch_calls:?}, area={}, perimeter={}", architecture.plan, length * width, 2 * (length + width));
-    eprintln!("EVAL english answer={english_answer:?}, plan={:?}, calls={english_calls:?}", english.plan);
-    for (label, session, calls, answer) in [("architecture", &architecture, &arch_calls, &arch_answer), ("english", &english, &english_calls, &english_answer)] {
-        assert!(calls.iter().any(|c| c == "web_search") && calls.iter().any(|c| c == "web_fetch"), "{label}: did not search and open a source");
-        let cited_and_fetched = session.messages.iter().flat_map(|m| &m.tool_calls).filter(|c| c.name == "web_fetch").any(|call| {
-            call.arg("url").is_some_and(|url| answer.contains(url) && session.messages.iter().any(|m|
-                m.tool_call_id.as_deref() == Some(call.id.as_str()) && m.content.starts_with("Text of ")))
-        });
-        assert!(cited_and_fetched, "{label}: no cited source was successfully opened");
-        assert!(!session.plan.is_empty() && session.plan.iter().all(|s| s.status == cordial_core::session::PlanStatus::Done), "{label}: unfinished checklist");
+    eprintln!(
+        "EVAL english answer={english_answer:?}, plan={:?}, calls={english_calls:?}",
+        english.plan
+    );
+    for (label, session, calls, answer) in [
+        ("architecture", &architecture, &arch_calls, &arch_answer),
+        ("english", &english, &english_calls, &english_answer),
+    ] {
+        assert!(
+            calls.iter().any(|c| c == "web_search") && calls.iter().any(|c| c == "web_fetch"),
+            "{label}: did not search and open a source"
+        );
+        let cited_and_fetched = session
+            .messages
+            .iter()
+            .flat_map(|m| &m.tool_calls)
+            .filter(|c| c.name == "web_fetch")
+            .any(|call| {
+                call.arg("url").is_some_and(|url| {
+                    answer.contains(url)
+                        && session.messages.iter().any(|m| {
+                            m.tool_call_id.as_deref() == Some(call.id.as_str())
+                                && m.content.starts_with("Text of ")
+                        })
+                })
+            });
+        assert!(
+            cited_and_fetched,
+            "{label}: no cited source was successfully opened"
+        );
+        assert!(
+            !session.plan.is_empty()
+                && session
+                    .plan
+                    .iter()
+                    .all(|s| s.status == cordial_core::session::PlanStatus::Done),
+            "{label}: unfinished checklist"
+        );
     }
     let arch = arch_answer.to_lowercase();
-    assert!(arch.contains("utzon") && arch.contains("1973") && arch.contains(&(length * width).to_string()) && arch.contains(&(2 * (length + width)).to_string()), "architecture answers did not match the independent key");
+    assert!(
+        arch.contains("utzon")
+            && arch.contains("1973")
+            && arch.contains(&(length * width).to_string())
+            && arch.contains(&(2 * (length + width)).to_string()),
+        "architecture answers did not match the independent key"
+    );
     let eng = english_answer.to_lowercase();
-    assert!(eng.contains("personification") && eng.contains("metaphor") && eng.contains("shakespeare") && eng.contains("1609"), "English answers did not match the independent key");
+    assert!(
+        eng.contains("personification")
+            && eng.contains("metaphor")
+            && eng.contains("shakespeare")
+            && eng.contains("1609"),
+        "English answers did not match the independent key"
+    );
 }
 
 /// Optional exact-file evaluation. The PDF is supplied by the test operator,
