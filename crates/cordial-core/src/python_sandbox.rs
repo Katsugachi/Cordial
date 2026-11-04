@@ -62,8 +62,9 @@ impl PythonSandbox {
         Ok(Self { engine, module })
     }
 
-    /// Execute a bounded script in a fresh capability-free WASI instance.
-    pub fn run(&self, script: &str) -> Result<String, String> {
+    /// Execute in a fresh capability-free WASI instance. Call only from a
+    /// blocking thread: the synchronous WASI adapter must not run on a Tokio worker.
+    pub(crate) fn run(&self, script: &str) -> Result<String, String> {
         let engine = &self.engine;
         let module = &self.module;
         if script.is_empty() || script.len() > MAX_SCRIPT_BYTES || script.contains('\0') {
@@ -134,8 +135,8 @@ impl PythonSandbox {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn isolated_python_executes_calculations_and_refuses_host_access() {
+    #[test]
+    fn isolated_python_executes_calculations_and_refuses_host_access() {
         let path = std::env::var("CORDIAL_TEST_PYTHON_WASM")
             .expect("sandbox-python tests require CORDIAL_TEST_PYTHON_WASM");
         let sandbox = PythonSandbox::load(Path::new(&path)).expect("load pinned WASI runtime");
@@ -215,7 +216,8 @@ mod tests {
                 value: "print(6 * 7)".into(),
             }],
         };
-        let outcome = runtime.execute(&call).await;
+        let executor = tokio::runtime::Runtime::new().unwrap();
+        let outcome = executor.block_on(runtime.execute(&call));
         assert!(outcome.ok, "{}", outcome.text);
         assert!(outcome.text.contains("42"));
         assert_eq!(
