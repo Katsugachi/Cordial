@@ -33,4 +33,7 @@ geometry calculation, and literary analysis. It is triggered with `[research]`
 and independently checks selected answers; it is not a comprehensive held-out
 benchmark. In [run 41795514600](https://github.com/Katsugachi/Cordial/actions/runs/41795514600)
 the model produced no final answer for either worksheet. The English attempt
-repeated web fetches until its context filled. These tests failed.
+repeated web fetches until its context filled. In the later [run 41798196782](https://github.com/Katsugachi/Cordial/actions/runs/41798196782),
+the architecture answer contained the checked facts and arithmetic but no
+source URL or checklist; the English task stopped after repeated HTTP 403s.
+Both runs failed the end-to-end research tests.

@@ -151,6 +151,9 @@ pub fn read_text_bounded(path: &Path, max_chars: usize) -> Result<String, CoreEr
         )));
     }
     let bytes = std::fs::read(path)?;
+    if bytes.starts_with(b"%PDF-") {
+        return Err(CoreError::Other("PDF documents cannot be read as text; diagrams and layout would be lost".to_string()));
+    }
     if bytes.iter().take(8192).any(|b| *b == 0) {
         return Err(CoreError::Other(
             "this looks like a binary file, not text".to_string(),
@@ -280,6 +283,15 @@ mod tests {
         let workspace = temp_workspace("binary");
         let file = workspace.join("image.bin");
         std::fs::write(&file, [0u8, 1, 2, 3, 0, 9]).unwrap();
+        assert!(read_text_bounded(&file, 1000).is_err());
+        std::fs::remove_dir_all(&workspace).ok();
+    }
+
+    #[test]
+    fn pdf_magic_is_rejected_even_with_a_text_extension() {
+        let workspace = temp_workspace("pdf-magic");
+        let file = workspace.join("worksheet.txt");
+        std::fs::write(&file, b"%PDF-1.4\nnot a readable worksheet").unwrap();
         assert!(read_text_bounded(&file, 1000).is_err());
         std::fs::remove_dir_all(&workspace).ok();
     }
