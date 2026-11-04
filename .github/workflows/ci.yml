@@ -293,3 +293,49 @@ jobs:
           name: live-model-transcript
           path: /tmp/live-report.md
           if-no-files-found: ignore
+
+  research-evaluation:
+    name: Architecture and English research evaluation
+    needs: python-sandbox
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      contains(github.event.head_commit.message, '[parallel-research]')
+    runs-on: instabox-medium
+    timeout-minutes: 110
+    env:
+      CORDIAL_PORTABLE_CPU: "1"
+      CARGO_BUILD_JOBS: "4"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cordial-python-sandbox
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cordial-models
+          key: lfm3-vl-2b-q4km-mmproj-q8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm --prefix ui ci
+      - name: Evaluate research worksheets
+        timeout-minutes: 95
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/research-eval.log
+      - name: Publish research diagnostics
+        if: always()
+        run: python3 scripts/ci/task_eval_diagnostics.py /tmp/research-eval.log
+      - name: Upload research diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-task-evaluation
+          path: /tmp/research-eval.log
+          if-no-files-found: ignore

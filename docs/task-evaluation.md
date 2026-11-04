@@ -32,7 +32,11 @@ inference checks passed. A prior run was superseded after more than 40 minutes
 without a final result. With the experimental Python tool available in the
 live harness, [run 41908510800](https://github.com/Katsugachi/Cordial/actions/runs/41908510800)
 again exhausted its budget: the model repeatedly updated a pending checklist
-and did not use Python. The isolated runtime passed its Linux security tests,
+and did not use Python. In [run 41914447409](https://github.com/Katsugachi/Cordial/actions/runs/41914447409)
+the model identified the diagram dimensions and executed Python in the isolated
+runtime, but its final answers were wrong: it double-counted the cone base,
+reversed the rod-fit conclusion, and gave the wrong cube volume. Its checklist
+also remained unfinished. The isolated runtime passed its Linux security tests,
 but it is not enabled in the desktop app. PDF diagrams require visual rendering,
 not text extraction alone.
 The fixture was removed from the current branch after the test, but remains in

@@ -784,3 +784,19 @@ async fn task_overflow_reduces_prompt_tool_results_without_deleting_history() {
         panic!("expected scripted backend");
     }
 }
+
+#[tokio::test]
+async fn repeated_unchanged_checklist_prompts_work_instead_of_looping() {
+    let fixture = Fixture::new("unchanged-plan");
+    let mut session = Session::new();
+    let plan = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"running\"}]</parameter></function></tool_call>";
+    let read = "<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>";
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let (result, events) = run_turn(&fixture, vec![plan, plan, plan, read, done, "The notes say Friday."],
+        config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(session.plan.len(), 1);
+    assert_eq!(session.plan[0].status, cordial_core::session::PlanStatus::Done);
+    assert!(session.messages.iter().any(|message| message.role == Role::Tool && message.content.contains("ship on Friday")));
+    assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message.contains("checklist has not changed"))));
+}

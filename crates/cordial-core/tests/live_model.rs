@@ -212,6 +212,9 @@ impl Live {
                         name, summary, ok, ..
                     } => {
                         eprintln!("EVAL progress tool {name} ok={ok}: {summary}");
+                        if name == "python_calculate" && ok {
+                            eprintln!("::notice title=Live evaluation::A Python calculation completed in the isolated interpreter.");
+                        }
                         diagnostics.push(format!("tool {name} ok={ok}: {summary}"));
                     }
                     _ => {}
@@ -410,16 +413,23 @@ async fn research_worksheets_architecture_and_english() {
     let Some(mut live) = Live::boot().await else {
         panic!("model unavailable")
     };
+    // Keep this a finite evaluation even if the model gets stuck; normal Task
+    // mode retains its larger budget.
+    live.max_tool_rounds_override = Some(20);
     let seed = cordial_core::util::now_ms() % 5;
     let width = 12 + seed;
     let length = 19 + seed;
+    let area = length * width;
+    let packs = (area * 11 + 24) / 25; // ceiling(area * 1.10 / 2.5)
+    let cost = packs * 48;
     std::fs::write(live.workspace.join("architecture.txt"), format!(
-        "Architecture worksheet\n1. Research who designed the Sydney Opera House and in what year it opened. Cite a source.\n2. A rectangular gallery measures {length} metres by {width} metres. Calculate its floor area and wall perimeter, showing the method.\n3. Explain one difference between floor area and perimeter.\n"
+        "Architecture worksheet\n1. Research who designed the Sydney Opera House and in what year it opened. Cite a source.\n2. A rectangular gallery measures {length} metres by {width} metres. Calculate its floor area and wall perimeter, showing the method.\n3. Flooring is sold in packs covering 2.5 square metres, costs 48 dollars per pack, and requires 10 percent extra for waste. Calculate the smallest whole number of packs and their total cost.\n4. Explain one difference between floor area and perimeter.\n"
     )).unwrap();
     let (architecture, arch_answer) = live.turn(Effort::Task, true,
         "Complete every question in architecture.txt. Research factual claims, cite source URLs, and explain each answer.", vec![]).await;
+    eprintln!("EVAL architecture interim answer={arch_answer:?}, plan={:?}", architecture.plan);
     std::fs::write(live.workspace.join("english.txt"),
-        "English worksheet\n1. In the sentence 'The wind whispered secrets to the street', identify and explain the figure of speech.\n2. In 'The library was a lighthouse in the storm', identify and explain the figure of speech.\n3. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n").unwrap();
+        "English worksheet\n1. In the sentence 'The wind whispered secrets to the street', identify and explain the figure of speech and its effect.\n2. In 'The library was a lighthouse in the storm', identify and explain the figure of speech and its effect.\n3. Compare how the two images make an ordinary subject feel.\n4. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n").unwrap();
     let (english, english_answer) = live.turn(Effort::Task, true,
         "Complete every question in english.txt. Research factual claims, cite source URLs, and explain each answer.", vec![]).await;
     let names = |s: &Session| -> Vec<String> {
@@ -431,7 +441,7 @@ async fn research_worksheets_architecture_and_english() {
     };
     let arch_calls = names(&architecture);
     let english_calls = names(&english);
-    eprintln!("EVAL architecture answer={arch_answer:?}, plan={:?}, calls={arch_calls:?}, area={}, perimeter={}", architecture.plan, length * width, 2 * (length + width));
+    eprintln!("EVAL architecture answer={arch_answer:?}, plan={:?}, calls={arch_calls:?}, area={area}, perimeter={}, packs={packs}, cost={cost}", architecture.plan, 2 * (length + width));
     eprintln!(
         "EVAL english answer={english_answer:?}, plan={:?}, calls={english_calls:?}",
         english.plan
@@ -475,14 +485,18 @@ async fn research_worksheets_architecture_and_english() {
     assert!(
         arch.contains("utzon")
             && arch.contains("1973")
-            && arch.contains(&(length * width).to_string())
-            && arch.contains(&(2 * (length + width)).to_string()),
+            && arch.contains(&area.to_string())
+            && arch.contains(&(2 * (length + width)).to_string())
+            && arch.contains(&packs.to_string())
+            && arch.contains(&cost.to_string()),
         "architecture answers did not match the independent key"
     );
     let eng = english_answer.to_lowercase();
     assert!(
         eng.contains("personification")
             && eng.contains("metaphor")
+            && eng.contains("wind")
+            && eng.contains("library")
             && eng.contains("shakespeare")
             && eng.contains("1609"),
         "English answers did not match the independent key"
@@ -537,9 +551,16 @@ async fn rendered_pdf_worksheet_end_to_end() {
     let leftover_scripts =
         contains_script(&live.workspace).unwrap() || contains_script(live._scratch.path()).unwrap();
     eprintln!("EVAL rendered worksheet answer={answer:?}, plan={:?}, tools={calls:?}, leftover_scripts={leftover_scripts}", session.plan);
+    for call in session.messages.iter().flat_map(|message| &message.tool_calls).filter(|call| call.name == "python_calculate") {
+        let result = session.messages.iter().find(|message| message.tool_call_id.as_deref() == Some(call.id.as_str()));
+        eprintln!("EVAL python code={:?}, result={:?}", call.arg("code"), result.map(|message| &message.content));
+    }
+    // Some models emit an extra reasoning terminator even in no-thinking mode;
+    // do not count an intermediate draft as the final answer.
+    let final_answer = answer.rsplit("</think>").next().unwrap_or(&answer);
     let numbers: Vec<&str> = regex::Regex::new(r"[+-]?[0-9]+(?:\.[0-9]+)?")
         .unwrap()
-        .find_iter(&answer)
+        .find_iter(final_answer)
         .map(|m| m.as_str())
         .collect();
     // Questions 1 and 3 explicitly require two and three decimal places.
@@ -554,7 +575,7 @@ async fn rendered_pdf_worksheet_end_to_end() {
             .any(|actual| (actual - 47.16990566028302).abs() < 0.005),
         "the independently calculated box diagonal was missing: {numbers:?}"
     );
-    let lower = answer.to_ascii_lowercase();
+    let lower = final_answer.to_ascii_lowercase();
     assert!(
         regex::Regex::new(r"\b(yes|will fit|can fit|fits inside|fits in|does fit)\b")
             .unwrap()

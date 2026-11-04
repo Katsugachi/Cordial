@@ -10,10 +10,11 @@ if not path.exists():
 lines = path.read_text(errors="replace").splitlines()
 # GitHub only accepts ten annotations per step. Prioritise the final result
 # and failure, not a long stream of intermediate plan updates.
-final = [line for line in lines if line.startswith("EVAL ") and not line.startswith("EVAL progress")]
+final = [line for line in lines if line.startswith("EVAL ") and not line.startswith(("EVAL progress", "EVAL python"))]
+python = [line for line in lines if line.startswith("EVAL python")]
 failures = [line for line in lines if "panicked at" in line or "test result:" in line or "error: test failed" in line or "SIGKILL" in line]
 progress = [line for line in lines if line.startswith("EVAL progress")]
-selected = final[-2:] + failures[-3:]
+selected = final[-2:] + python[-2:] + failures[-3:]
 if progress:
     selected.append("Progress: " + " | ".join(progress[-5:]))
 selected += lines[-3:]
