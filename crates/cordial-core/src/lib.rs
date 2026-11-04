@@ -17,6 +17,9 @@ pub mod protocol;
 pub mod session;
 pub mod settings;
 pub mod tools;
+
+#[cfg(feature = "sandbox-python")]
+pub mod python_sandbox;
 pub mod util;
 
 pub use agent::{Agent, AgentConfig, ApprovalGate, TurnResult};

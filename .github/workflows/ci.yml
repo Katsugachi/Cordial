@@ -56,6 +56,29 @@ jobs:
       - name: Tests (harness)
         run: scripts/ci/report.sh cargo test --workspace --exclude cordial-app --all-targets
 
+  python-sandbox:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Experimental Python sandbox
+    runs-on: instabox-medium
+    timeout-minutes: 40
+    env:
+      CARGO_BUILD_JOBS: "4"
+      CMAKE_BUILD_PARALLEL_LEVEL: "4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cordial-python-sandbox
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm --prefix ui ci
+      - name: Test bounded WASI Python prototype
+        env:
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
+        run: scripts/ci/report.sh cargo test -p cordial-core --features sandbox-python python_sandbox::tests -- --nocapture
+
   app:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Desktop shell (compile check)

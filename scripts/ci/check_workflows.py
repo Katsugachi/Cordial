@@ -23,6 +23,7 @@ TRUSTED = (
 EXPECTED = {
     "ci.yml": {
         "rust": MEDIUM,
+        "python-sandbox": MEDIUM,
         "app": MEDIUM,
         "ui": MEDIUM,
         "inference-stack": MEDIUM,

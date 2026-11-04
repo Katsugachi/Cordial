@@ -47,6 +47,16 @@ for writes, and remembers a grant for the rest of the session.
   checks and is not isolation against a hostile local process. CSP restricts
   scripts to `'self'`, images to `self`/`asset:`/`data:`.
 
+## Experimental Python sandbox
+
+An opt-in WASI Python prototype is under test but is **not exposed to the agent**.
+It uses a pinned CPython module, no preopened host directories, no inherited
+host environment or standard input, bounded output, memory and instruction
+fuel. The module is integrity-checked and scripts are passed in memory rather
+than written to disk. These controls depend on the WASI runtime and operating
+system; they do not guarantee absolute safety. Packaging, cancellation,
+resource limits and isolation still require further cross-platform testing.
+
 ## Prompt injection
 
 A web page the agent reads can contain instructions ("ignore your previous

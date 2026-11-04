@@ -22,6 +22,7 @@
     "pdfjs-dist": "^6.5.438"
   },
   "devDependencies": {
+    "@antonz/python-wasi": "3.12.0",
     "@napi-rs/canvas": "^1.1.0",
     "@resvg/resvg-js": "^2.6.2",
     "@tauri-apps/cli": "^2.12.4",

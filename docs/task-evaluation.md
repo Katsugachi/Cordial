@@ -25,8 +25,12 @@ The exact user-supplied PDF was tested in [run 41794020560](https://github.com/K
 The agent did not read the worksheet, run Python, or solve it. It reported the
 work blocked. That run predated the PDF attachment renderer; the renderer now
 prepares bounded page images and text, but still needs end-to-end model
-validation. Sandboxed Python execution is not currently supported. PDF diagrams
-require visual rendering, not text extraction alone.
+validation. The follow-up rendered-page evaluation on Instabox (run 41815625401)
+reached a three-question checklist but exhausted a 12-round test budget without
+solving the worksheet or running Python. The ordinary desktop, UI, Rust and
+inference checks passed. A prior run was superseded after more than 40 minutes
+without a final result. Sandboxed Python execution is not currently supported.
+PDF diagrams require visual rendering, not text extraction alone.
 The fixture was removed from the current branch after the test, but remains in
 Git history, with the user's consent. This failed test does not validate other
 subjects or research tasks. A separate `research_worksheets_architecture_and_english`
