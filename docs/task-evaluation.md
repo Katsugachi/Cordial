@@ -20,3 +20,11 @@ unfinished and the Word task had no plan. Earlier runs also failed checklist
 progression. The ordinary Rust, UI, desktop and inference-stack jobs passed in
 that run. Do not treat successful arithmetic artifacts as proof that Task mode
 completed the requested autonomous workflow.
+
+The exact user-supplied PDF was tested in [run 41794020560](https://github.com/Katsugachi/Cordial/actions/runs/41794020560).
+The agent did not read the worksheet, run Python, or solve it. It reported the
+work blocked. PDF attachments and sandboxed Python execution are not currently
+supported; PDF diagrams require visual rendering, not text extraction alone.
+The fixture was removed from the current branch after the test, but remains in
+Git history, with the user's consent. This failed test does not validate other
+subjects or research tasks.

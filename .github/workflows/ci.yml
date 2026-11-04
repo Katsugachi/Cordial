@@ -147,8 +147,7 @@ jobs:
     if: >-
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       ((github.event_name == 'workflow_dispatch' && inputs.live) ||
-      contains(github.event.head_commit.message, '[live]') ||
-      contains(github.event.head_commit.message, '[worksheet]'))
+      contains(github.event.head_commit.message, '[live]'))
     runs-on: instabox-medium
     timeout-minutes: 120
     env:
@@ -166,15 +165,6 @@ jobs:
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Test independent artifact verifier
         run: python3 scripts/ci/test_verify_task_artifacts.py
-      - name: Exact user worksheet evaluation
-        if: contains(github.event.head_commit.message, '[worksheet]')
-        env:
-          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
-          CORDIAL_WORKSHEET_PDF: ${{ github.workspace }}/test-fixtures/worksheet.pdf
-        run: |
-          set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
-            --exact user_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
       - name: Generated task evaluation
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
