@@ -613,7 +613,14 @@ impl<'a> Agent<'a> {
         let mut tool_result_limit = self.config.max_tool_result_chars;
         loop {
             attempts += 1;
-            let request = self.build_request(session, turn_id, tools, system_suffix, thinking, tool_result_limit);
+            let request = self.build_request(
+                session,
+                turn_id,
+                tools,
+                system_suffix,
+                thinking,
+                tool_result_limit,
+            );
             match self.backend.generate(request, self.events).await {
                 Ok(output) => return Ok(output),
                 Err(err @ CoreError::ContextOverflow { .. }) => {
@@ -626,8 +633,12 @@ impl<'a> Agent<'a> {
                         });
                     } else {
                         let reduced = (tool_result_limit / 2).max(512);
-                        let can_reduce = self.config.effort == Effort::Task && reduced < tool_result_limit
-                            && session.messages.iter().any(|m| m.role == crate::session::Role::Tool && m.content.chars().count() > reduced);
+                        let can_reduce = self.config.effort == Effort::Task
+                            && reduced < tool_result_limit
+                            && session.messages.iter().any(|m| {
+                                m.role == crate::session::Role::Tool
+                                    && m.content.chars().count() > reduced
+                            });
                         if !can_reduce {
                             return Err(err);
                         }
