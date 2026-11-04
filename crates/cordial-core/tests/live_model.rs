@@ -154,6 +154,14 @@ impl Live {
             Effort::Medium,
         )
         .expect("create live tool runtime");
+        #[cfg(feature = "sandbox-python")]
+        let runtime = if let Ok(path) = std::env::var("CORDIAL_TEST_PYTHON_WASM") {
+            let sandbox = tokio::task::spawn_blocking(move || cordial_core::python_sandbox::PythonSandbox::load(Path::new(&path)))
+                .await.expect("join Python compilation").expect("load Python sandbox");
+            runtime.with_python_sandbox(Arc::new(sandbox))
+        } else {
+            runtime
+        };
 
         Some(Self {
             backend: Backend::Llama(backend),
@@ -492,7 +500,7 @@ async fn rendered_pdf_worksheet_end_to_end() {
     };
     // A bounded evaluation should produce diagnostics even if the model loops.
     // Production Task mode retains its larger independent round budget.
-    live.max_tool_rounds_override = Some(12);
+    live.max_tool_rounds_override = Some(18);
     let (session, answer) = live.turn(Effort::Task, false,
         "Complete the attached worksheet. Show reasoning for each answer. Use Python for calculations and clean up any temporary scripts.",
         vec![Attachment { kind: AttachmentKind::Image, name: "worksheet.pdf, page 1 (image)".into(), path: image },

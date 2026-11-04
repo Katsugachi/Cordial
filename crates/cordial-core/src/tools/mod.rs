@@ -187,6 +187,17 @@ pub fn specs(web_enabled: bool) -> Vec<ToolSpec> {
         }),
         risk: Risk::Read,
     });
+    #[cfg(feature = "sandbox-python")]
+    out.push(ToolSpec {
+        name: "python_calculate",
+        description: "Run a short Python calculation in an isolated in-memory interpreter. No files, network, subprocesses or persistent variables; print results. Scripts are not saved to disk.",
+        parameters: json!({
+            "type": "object",
+            "properties": { "code": string_param("Python code to execute; print the results") },
+            "required": ["code"]
+        }),
+        risk: Risk::Read,
+    });
     out.push(ToolSpec {
         name: "docx_read",
         description: "Read numbered DOCX paragraphs. If the result gives a next start index, call again until all paragraphs are read.",
@@ -291,6 +302,8 @@ pub struct ToolRuntime {
     scratch: PathBuf,
     effort: Effort,
     browser: Arc<Mutex<Option<browser::BrowserSession>>>,
+    #[cfg(feature = "sandbox-python")]
+    python: Option<Arc<crate::python_sandbox::PythonSandbox>>,
 }
 
 impl ToolRuntime {
@@ -310,7 +323,22 @@ impl ToolRuntime {
             scratch,
             effort,
             browser: Arc::new(Mutex::new(None)),
+            #[cfg(feature = "sandbox-python")]
+            python: None,
         })
+    }
+
+    #[cfg(feature = "sandbox-python")]
+    pub fn with_python_sandbox(mut self, sandbox: Arc<crate::python_sandbox::PythonSandbox>) -> Self {
+        self.python = Some(sandbox);
+        self
+    }
+
+    pub fn has_python_sandbox(&self) -> bool {
+        #[cfg(feature = "sandbox-python")]
+        { self.python.is_some() }
+        #[cfg(not(feature = "sandbox-python"))]
+        { false }
     }
 
     pub fn workspace(&self) -> &std::path::Path {
@@ -339,6 +367,21 @@ impl ToolRuntime {
             "list_files" => files::list(self, call),
             "write_file" => files::write(self, call),
             "run_command" => commands::run(self, call).await,
+            #[cfg(feature = "sandbox-python")]
+            "python_calculate" => {
+                let Some(python) = self.python.clone() else {
+                    return ToolOutcome::fail("Python unavailable", "Error: the isolated Python runtime is not available.");
+                };
+                let Some(code) = call.arg("code") else {
+                    return ToolOutcome::fail("missing code", "Error: `code` is required.");
+                };
+                let code = code.to_owned();
+                match tokio::task::spawn_blocking(move || python.run(&code)).await {
+                    Ok(Ok(output)) => ToolOutcome::ok("Python calculation completed", format!("Python output:\n{output}\nNo script file was created.")),
+                    Ok(Err(error)) => ToolOutcome::fail("Python calculation failed", format!("Error: {error}")),
+                    Err(error) => ToolOutcome::fail("Python worker failed", format!("Error: {error}")),
+                }
+            }
             "docx_read" => docx::read(self, call),
             "docx_edit" => docx::edit(self, call),
             "docx_create" => docx::create(self, call),

@@ -208,6 +208,9 @@ impl<'a> Agent<'a> {
                 && session.plan.is_empty()
                 && planning_attempts < 3;
             let mut tools_for_prompt = tools::specs(self.config.web_enabled);
+            if !self.tools.has_python_sandbox() {
+                tools_for_prompt.retain(|tool| tool.name != "python_calculate");
+            }
             if planning {
                 planning_attempts += 1;
             }

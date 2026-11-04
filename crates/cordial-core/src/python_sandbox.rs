@@ -1,4 +1,4 @@
-//! Experimental WASI Python calculator. Not yet exposed to the agent.
+//! Experimental WASI Python calculator, not enabled in the desktop app.
 //!
 //! This runs only the pinned CPython WASI module, not arbitrary wasm. No host
 //! directories, environment, inherited descriptors, processes or network are
@@ -89,6 +89,12 @@ impl PythonSandbox {
         let mut linker = Linker::new(engine);
         preview1::add_to_linker_sync(&mut linker, |state: &mut State| &mut state.wasi)
             .map_err(|e| format!("Cannot configure sandbox: {e}"))?;
+        // Fuel only counts guest instructions; a WASI poll may otherwise sleep
+        // inside the host for an arbitrary time without consuming fuel. The
+        // calculator has no need for timers or descriptor polling.
+        linker.allow_shadowing(true);
+        linker.func_wrap("wasi_snapshot_preview1", "poll_oneoff", |_: i32, _: i32, _: i32, _: i32| -> i32 { 58 })
+            .map_err(|e| format!("Cannot disable blocking WASI polls: {e}"))?;
         let instance = linker
             .instantiate(&mut store, module)
             .map_err(|e| format!("Cannot start sandbox: {e}"))?;
@@ -96,8 +102,13 @@ impl PythonSandbox {
             .get_typed_func::<(), ()>(&mut store, "_start")
             .map_err(|e| format!("Invalid Python runtime: {e}"))?;
         let result = start.call(&mut store, ());
-        let output = String::from_utf8_lossy(&stdout.contents()).into_owned();
-        let errors = String::from_utf8_lossy(&stderr.contents()).into_owned();
+        let output_bytes = stdout.contents();
+        let error_bytes = stderr.contents();
+        let output = String::from_utf8_lossy(&output_bytes).into_owned();
+        let errors = String::from_utf8_lossy(&error_bytes).into_owned();
+        if output_bytes.len() >= MAX_OUTPUT_BYTES || error_bytes.len() >= MAX_OUTPUT_BYTES {
+            return Err("Python output exceeded the sandbox limit".into());
+        }
         match result {
             Ok(()) => Ok(output),
             Err(error)
@@ -118,8 +129,8 @@ impl PythonSandbox {
 mod tests {
     use super::*;
 
-    #[test]
-    fn isolated_python_executes_calculations_and_refuses_host_access() {
+    #[tokio::test]
+    async fn isolated_python_executes_calculations_and_refuses_host_access() {
         let path = std::env::var("CORDIAL_TEST_PYTHON_WASM")
             .expect("sandbox-python tests require CORDIAL_TEST_PYTHON_WASM");
         let sandbox = PythonSandbox::load(Path::new(&path)).expect("load pinned WASI runtime");
@@ -138,11 +149,37 @@ mod tests {
             sandbox.run("print('x' * 1000000)").is_err(),
             "output limit not enforced"
         );
+        assert!(sandbox.run("import time; time.sleep(60)").is_err(), "blocking WASI polling was allowed");
+        assert!(sandbox.run("import socket; socket.socket()").is_err(), "network socket was allowed");
+        assert!(sandbox.run("x = bytearray(1024 * 1024 * 1024)").is_err(), "memory limit was not enforced");
+        assert!(sandbox.run("import os; os.system('echo unsafe')").is_err(), "process creation was allowed");
+        sandbox.run("x = 123").expect("first isolated run");
+        assert!(sandbox.run("print(x)").is_err(), "state leaked between instances");
+        let sentinel = std::env::temp_dir().join(format!("cordial-wasi-sentinel-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&sentinel, b"unchanged").unwrap();
+        let escaped = sentinel.to_string_lossy().replace('\\', "\\\\").replace('\'', "\\'");
+        assert!(sandbox.run(&format!("open('{escaped}', 'w').write('changed')")).is_err(), "host write was allowed");
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"unchanged");
+        std::fs::remove_file(sentinel).unwrap();
         assert!(sandbox.run(&"a".repeat(MAX_SCRIPT_BYTES + 1)).is_err());
         let bad =
             std::env::temp_dir().join(format!("cordial-wasm-tampered-{}", uuid::Uuid::new_v4()));
         std::fs::write(&bad, b"not the pinned runtime").unwrap();
         assert!(PythonSandbox::load(&bad).is_err());
         std::fs::remove_file(bad).unwrap();
+
+        let root = std::env::temp_dir().join(format!("cordial-python-tool-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let runtime = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
+            .unwrap().with_python_sandbox(std::sync::Arc::new(sandbox));
+        let call = crate::session::ToolCall {
+            id: "test".into(), name: "python_calculate".into(),
+            arguments: vec![crate::session::ToolArgument { name: "code".into(), value: "print(6 * 7)".into() }],
+        };
+        let outcome = runtime.execute(&call).await;
+        assert!(outcome.ok, "{}", outcome.text);
+        assert!(outcome.text.contains("42"));
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0, "the tool created a file");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

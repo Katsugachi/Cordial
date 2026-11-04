@@ -161,6 +161,7 @@ jobs:
           find /tmp/llama-build -name "libllama.a" | grep -q .
   live-model:
     name: Behaviour suite (real LFM3-VL-2B)
+    needs: python-sandbox
     permissions:
       contents: write
     # Same job as .github/workflows/live.yml. Reachable from a branch two ways:
@@ -182,7 +183,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cordial-rust
+          shared-key: ${{ contains(github.event.head_commit.message, '[pdf-test]') && 'cordial-python-sandbox' || 'cordial-rust' }}
       - uses: actions/cache@v4
         id: weights
         with:
@@ -206,15 +207,16 @@ jobs:
             CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
             npm --prefix ui test -- --run tests/pdf.test.ts
       - name: Evaluate supplied worksheet with the real model
-        timeout-minutes: 40
+        timeout-minutes: 50
         if: contains(github.event.head_commit.message, '[pdf-test]')
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
         run: |
           set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
       - name: Remove temporary worksheet renders
         if: always() && contains(github.event.head_commit.message, '[pdf-test]')
