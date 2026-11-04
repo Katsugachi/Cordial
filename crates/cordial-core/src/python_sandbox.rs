@@ -93,7 +93,12 @@ impl PythonSandbox {
         // inside the host for an arbitrary time without consuming fuel. The
         // calculator has no need for timers or descriptor polling.
         linker.allow_shadowing(true);
-        linker.func_wrap("wasi_snapshot_preview1", "poll_oneoff", |_: i32, _: i32, _: i32, _: i32| -> i32 { 58 })
+        linker
+            .func_wrap(
+                "wasi_snapshot_preview1",
+                "poll_oneoff",
+                |_: i32, _: i32, _: i32, _: i32| -> i32 { 58 },
+            )
             .map_err(|e| format!("Cannot disable blocking WASI polls: {e}"))?;
         let instance = linker
             .instantiate(&mut store, module)
@@ -149,16 +154,40 @@ mod tests {
             sandbox.run("print('x' * 1000000)").is_err(),
             "output limit not enforced"
         );
-        assert!(sandbox.run("import time; time.sleep(60)").is_err(), "blocking WASI polling was allowed");
-        assert!(sandbox.run("import socket; socket.socket()").is_err(), "network socket was allowed");
-        assert!(sandbox.run("x = bytearray(1024 * 1024 * 1024)").is_err(), "memory limit was not enforced");
-        assert!(sandbox.run("import os; os.system('echo unsafe')").is_err(), "process creation was allowed");
+        assert!(
+            sandbox.run("import time; time.sleep(60)").is_err(),
+            "blocking WASI polling was allowed"
+        );
+        assert!(
+            sandbox.run("import socket; socket.socket()").is_err(),
+            "network socket was allowed"
+        );
+        assert!(
+            sandbox.run("x = bytearray(1024 * 1024 * 1024)").is_err(),
+            "memory limit was not enforced"
+        );
+        assert!(
+            sandbox.run("import os; os.system('echo unsafe')").is_err(),
+            "process creation was allowed"
+        );
         sandbox.run("x = 123").expect("first isolated run");
-        assert!(sandbox.run("print(x)").is_err(), "state leaked between instances");
-        let sentinel = std::env::temp_dir().join(format!("cordial-wasi-sentinel-{}", uuid::Uuid::new_v4()));
+        assert!(
+            sandbox.run("print(x)").is_err(),
+            "state leaked between instances"
+        );
+        let sentinel =
+            std::env::temp_dir().join(format!("cordial-wasi-sentinel-{}", uuid::Uuid::new_v4()));
         std::fs::write(&sentinel, b"unchanged").unwrap();
-        let escaped = sentinel.to_string_lossy().replace('\\', "\\\\").replace('\'', "\\'");
-        assert!(sandbox.run(&format!("open('{escaped}', 'w').write('changed')")).is_err(), "host write was allowed");
+        let escaped = sentinel
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('\'', "\\'");
+        assert!(
+            sandbox
+                .run(&format!("open('{escaped}', 'w').write('changed')"))
+                .is_err(),
+            "host write was allowed"
+        );
         assert_eq!(std::fs::read(&sentinel).unwrap(), b"unchanged");
         std::fs::remove_file(sentinel).unwrap();
         assert!(sandbox.run(&"a".repeat(MAX_SCRIPT_BYTES + 1)).is_err());
@@ -168,18 +197,32 @@ mod tests {
         assert!(PythonSandbox::load(&bad).is_err());
         std::fs::remove_file(bad).unwrap();
 
-        let root = std::env::temp_dir().join(format!("cordial-python-tool-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("cordial-python-tool-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
-        let runtime = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
-            .unwrap().with_python_sandbox(std::sync::Arc::new(sandbox));
+        let runtime = crate::tools::ToolRuntime::new(
+            root.clone(),
+            root.join("scratch"),
+            crate::settings::Effort::Task,
+        )
+        .unwrap()
+        .with_python_sandbox(std::sync::Arc::new(sandbox));
         let call = crate::session::ToolCall {
-            id: "test".into(), name: "python_calculate".into(),
-            arguments: vec![crate::session::ToolArgument { name: "code".into(), value: "print(6 * 7)".into() }],
+            id: "test".into(),
+            name: "python_calculate".into(),
+            arguments: vec![crate::session::ToolArgument {
+                name: "code".into(),
+                value: "print(6 * 7)".into(),
+            }],
         };
         let outcome = runtime.execute(&call).await;
         assert!(outcome.ok, "{}", outcome.text);
         assert!(outcome.text.contains("42"));
-        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0, "the tool created a file");
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            0,
+            "the tool created a file"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }

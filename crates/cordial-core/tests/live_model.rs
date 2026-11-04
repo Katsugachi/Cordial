@@ -156,8 +156,12 @@ impl Live {
         .expect("create live tool runtime");
         #[cfg(feature = "sandbox-python")]
         let runtime = if let Ok(path) = std::env::var("CORDIAL_TEST_PYTHON_WASM") {
-            let sandbox = tokio::task::spawn_blocking(move || cordial_core::python_sandbox::PythonSandbox::load(Path::new(&path)))
-                .await.expect("join Python compilation").expect("load Python sandbox");
+            let sandbox = tokio::task::spawn_blocking(move || {
+                cordial_core::python_sandbox::PythonSandbox::load(Path::new(&path))
+            })
+            .await
+            .expect("join Python compilation")
+            .expect("load Python sandbox");
             runtime.with_python_sandbox(Arc::new(sandbox))
         } else {
             runtime

@@ -329,16 +329,23 @@ impl ToolRuntime {
     }
 
     #[cfg(feature = "sandbox-python")]
-    pub fn with_python_sandbox(mut self, sandbox: Arc<crate::python_sandbox::PythonSandbox>) -> Self {
+    pub fn with_python_sandbox(
+        mut self,
+        sandbox: Arc<crate::python_sandbox::PythonSandbox>,
+    ) -> Self {
         self.python = Some(sandbox);
         self
     }
 
     pub fn has_python_sandbox(&self) -> bool {
         #[cfg(feature = "sandbox-python")]
-        { self.python.is_some() }
+        {
+            self.python.is_some()
+        }
         #[cfg(not(feature = "sandbox-python"))]
-        { false }
+        {
+            false
+        }
     }
 
     pub fn workspace(&self) -> &std::path::Path {
@@ -370,16 +377,26 @@ impl ToolRuntime {
             #[cfg(feature = "sandbox-python")]
             "python_calculate" => {
                 let Some(python) = self.python.clone() else {
-                    return ToolOutcome::fail("Python unavailable", "Error: the isolated Python runtime is not available.");
+                    return ToolOutcome::fail(
+                        "Python unavailable",
+                        "Error: the isolated Python runtime is not available.",
+                    );
                 };
                 let Some(code) = call.arg("code") else {
                     return ToolOutcome::fail("missing code", "Error: `code` is required.");
                 };
                 let code = code.to_owned();
                 match tokio::task::spawn_blocking(move || python.run(&code)).await {
-                    Ok(Ok(output)) => ToolOutcome::ok("Python calculation completed", format!("Python output:\n{output}\nNo script file was created.")),
-                    Ok(Err(error)) => ToolOutcome::fail("Python calculation failed", format!("Error: {error}")),
-                    Err(error) => ToolOutcome::fail("Python worker failed", format!("Error: {error}")),
+                    Ok(Ok(output)) => ToolOutcome::ok(
+                        "Python calculation completed",
+                        format!("Python output:\n{output}\nNo script file was created."),
+                    ),
+                    Ok(Err(error)) => {
+                        ToolOutcome::fail("Python calculation failed", format!("Error: {error}"))
+                    }
+                    Err(error) => {
+                        ToolOutcome::fail("Python worker failed", format!("Error: {error}"))
+                    }
                 }
             }
             "docx_read" => docx::read(self, call),
