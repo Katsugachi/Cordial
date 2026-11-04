@@ -40,11 +40,15 @@ export interface Attachment {
   kind: "image" | "text";
   name: string;
   path: string;
+  /** Locally rendered PDF page data, sent only to the desktop backend. */
+  inline_data?: string;
 }
 
 export interface AttachmentInput {
   kind: "image" | "text";
   path: string;
+  name?: string;
+  inline_data?: string;
 }
 
 export interface ToolArgument {

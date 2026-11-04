@@ -148,7 +148,8 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       ((github.event_name == 'workflow_dispatch' && inputs.live) ||
       contains(github.event.head_commit.message, '[live]') ||
-      contains(github.event.head_commit.message, '[research]'))
+      contains(github.event.head_commit.message, '[research]') ||
+      contains(github.event.head_commit.message, '[pdf-test]'))
     runs-on: instabox-medium
     timeout-minutes: 120
     env:
@@ -166,6 +167,34 @@ jobs:
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Test independent artifact verifier
         run: python3 scripts/ci/test_verify_task_artifacts.py
+      - uses: actions/setup-node@v4
+        if: contains(github.event.head_commit.message, '[pdf-test]')
+        with:
+          node-version: 22
+      - name: Prepare supplied worksheet with the desktop PDF renderer
+        if: contains(github.event.head_commit.message, '[pdf-test]')
+        run: |
+          git fetch --no-tags --depth=1 origin 9c579613cc3ebe5b39cfcf1466f418c7c539efaf
+          git show 9c579613cc3ebe5b39cfcf1466f418c7c539efaf:test-fixtures/worksheet.pdf > "$RUNNER_TEMP/worksheet.pdf"
+          trap 'rm -f "$RUNNER_TEMP/worksheet.pdf"' EXIT
+          npm --prefix ui ci
+          CORDIAL_PDF_TEST_PATH="$RUNNER_TEMP/worksheet.pdf" \
+            CORDIAL_PDF_RENDER_PATH="$RUNNER_TEMP/worksheet.png" \
+            CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
+            npm --prefix ui test -- --run tests/pdf.test.ts
+      - name: Evaluate supplied worksheet with the real model
+        if: contains(github.event.head_commit.message, '[pdf-test]')
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
+          CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
+      - name: Remove temporary worksheet renders
+        if: always() && contains(github.event.head_commit.message, '[pdf-test]')
+        run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt"
       - name: Research worksheet evaluation
         if: contains(github.event.head_commit.message, '[research]')
         env:
@@ -175,7 +204,7 @@ jobs:
           cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/task-eval.log
       - name: Generated task evaluation
-        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
+        if: ${{ !contains(github.event.head_commit.message, '[research]') && !contains(github.event.head_commit.message, '[pdf-test]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
@@ -193,7 +222,7 @@ jobs:
           path: /tmp/task-eval.log
           if-no-files-found: ignore
       - name: Load check (one question)
-        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
+        if: ${{ !contains(github.event.head_commit.message, '[research]') && !contains(github.event.head_commit.message, '[pdf-test]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
@@ -201,7 +230,7 @@ jobs:
           cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact answers_a_plain_factual_question_briefly 2>&1 | tee -a /tmp/live.log
       - name: Full suite
-        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
+        if: ${{ !contains(github.event.head_commit.message, '[research]') && !contains(github.event.head_commit.message, '[pdf-test]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |

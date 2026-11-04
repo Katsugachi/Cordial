@@ -17,6 +17,7 @@ export function composerHtml(state: AppState, attachments: Attachment[]): string
       <textarea class="composer__input" id="input" rows="1" placeholder="Ask anything..." aria-label="Message"></textarea>
       <div class="composer__toolbar">
         <button class="icon-button" data-action="attach" aria-label="Attach an image or file" title="Attach">${icons.attach(18)}</button>
+        <button class="composer__select" data-action="attach-pdf" type="button" aria-label="Attach a PDF" ${state.busy ? "disabled" : ""}>PDF</button>
         <label class="sr-only" for="permission-select">Permissions</label>
         <select id="permission-select" class="composer__select" aria-label="Permissions" ${state.busy ? "disabled" : ""}>
           <option value="auto" ${state.settings.permission_mode === "auto" ? "selected" : ""}>Auto</option>

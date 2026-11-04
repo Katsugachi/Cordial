@@ -3,6 +3,7 @@
 //! Cordial: a local agent powered by LFM3-VL-2B through llama.cpp.
 
 mod commands;
+mod pdf_attachments;
 mod state;
 
 use state::AppState;

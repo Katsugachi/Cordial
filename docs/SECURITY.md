@@ -42,7 +42,10 @@ for writes, and remembers a grant for the rest of the session.
   as untrusted, because a fetched page can steer it.
 - **Tauri surface.** The capability file grants only window dragging, the file
   picker, and opening paths; there is no filesystem or shell plugin enabled.
-  CSP restricts scripts to `'self'`, images to `self`/`asset:`/`data:`.
+  The send-message command also accepts bounded locally rendered PDF pages,
+  written only into generated scratch paths. Scratch confinement uses path-based
+  checks and is not isolation against a hostile local process. CSP restricts
+  scripts to `'self'`, images to `self`/`asset:`/`data:`.
 
 ## Prompt injection
 
@@ -85,7 +88,14 @@ llama.cpp runs in-process; there is no inference server listening on a port.
   to say when it cannot check something; it cannot guarantee truth.
 - Search uses DuckDuckGo's HTML endpoints, which are unofficial and may rate
   limit. The tool reports failures to the model instead of failing the turn.
-- PDFs are not parsed. The fetch tool says so rather than returning binary noise.
+- User-selected PDF attachments are rendered locally by PDF.js in the webview.
+  They are limited to 10 MB and three pages, with at most 4,000 extracted
+  characters per page. Each page image and text are stored unencrypted under
+  `scratch/pdf-attachments/` so saved sessions can refer to them; storage is
+  capped at 100 MB. No OCR, form filling, complete layout fidelity, or model
+  accuracy is guaranteed. Large documents are refused rather than partially
+  attached. Parsing an untrusted PDF still carries risks. Web-fetch PDFs and
+  workspace PDF reads are not supported.
 - The browser driver speaks CDP directly and targets Chromium-family browsers
   only. Safari and Firefox are not supported.
 

@@ -218,12 +218,17 @@ impl AppState {
         &self,
         session_id: String,
         text: String,
-        attachments: Vec<Attachment>,
+        attachments: Vec<crate::commands::AttachmentInput>,
     ) -> Result<(), String> {
         let Some(_guard) = TurnGuard::acquire(&self.busy) else {
             return Err("Cordial is still answering the previous message.".to_string());
         };
         self.cancel.store(false, Ordering::Relaxed);
+        let scratch = {
+            let core = self.core.lock().await;
+            core.paths.root().join("scratch").join("pdf-attachments")
+        };
+        let attachments = crate::pdf_attachments::prepare(attachments, &scratch)?;
         self.run_turn_inner(session_id, text, attachments).await
     }
 

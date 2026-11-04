@@ -26,6 +26,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
   let attachments: Attachment[] = [];
   let rendered = false;
   let sending = false;
+  let preparingPdf = false;
   let turnEventDuringBoot = false;
 
   const dialogHost = document.createElement("div");
@@ -239,7 +240,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
   }
 
   async function send(text: string): Promise<void> {
-    if (state.busy || sending) return;
+    if (state.busy || sending || preparingPdf) return;
     sending = true;
     const pending = attachments.slice();
     const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -257,7 +258,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       state.session = { ...state.session, messages: [...state.session.messages, message] };
       clearComposer();
       render("latest");
-      await bridge.sendMessage(sessionId, text, pending.map(({ kind, path }) => ({ kind, path })));
+      await bridge.sendMessage(sessionId, text, pending.map(({ kind, path, name, inline_data }) => ({ kind, path, name, inline_data })) );
       sent = true;
       // The durable transcript is authoritative; it replaces the optimistic copy.
       const saved = await bridge.loadSession(sessionId);
@@ -388,6 +389,51 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
     }
   }
 
+  function attachPdf(): void {
+    if (state.busy || preparingPdf) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,application/pdf";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file || state.busy || preparingPdf) return;
+      const targetSession = state.session?.id ?? null;
+      void (async () => {
+        preparingPdf = true;
+        state.error = null;
+        state.notice = "Preparing PDF pages locally…";
+        render();
+        try {
+          const { MAX_PDF_BYTES, preparePdf } = await import("./pdf");
+          if (file.size > MAX_PDF_BYTES) throw new Error("PDF must be at most 10 MB.");
+          const pages = await preparePdf(new Uint8Array(await file.arrayBuffer()));
+          if (state.busy || (state.session?.id ?? null) !== targetSession) {
+            throw new Error("The conversation changed while the PDF was being prepared. Please attach it again.");
+          }
+          if (attachments.filter((item) => item.inline_data !== undefined).length + pages.length * 2 > 6) {
+            throw new Error("At most three PDF pages can be attached to one message. No pages from this PDF were attached.");
+          }
+          const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const prepared: Attachment[] = [];
+          pages.forEach((page, index) => {
+            const label = `${file.name}, page ${index + 1}`;
+            prepared.push({ kind: "image", path: `inline:${id}:${index}:image`, name: `${label} (image)`, inline_data: page.image });
+            prepared.push({ kind: "text", path: `inline:${id}:${index}:text`, name: `${label} (text)`, inline_data: page.text || "[No extractable text on this page. Read the page image.]" });
+          });
+          attachments = [...attachments, ...prepared];
+          state.notice = `Attached ${pages.length} PDF page${pages.length === 1 ? "" : "s"} as images and extracted text.`;
+        } catch (error) {
+          state.error = error instanceof Error ? error.message : String(error);
+          state.notice = null;
+        } finally {
+          preparingPdf = false;
+          render();
+        }
+      })();
+    }, { once: true });
+    input.click();
+  }
+
   // ------------------------------------------------------------- listeners
 
   root.addEventListener("click", (event) => {
@@ -432,10 +478,17 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       case "attach":
         void attachFiles();
         break;
+      case "attach-pdf":
+        attachPdf();
+        break;
       case "remove-attachment": {
         const index = Number.parseInt(target.dataset.index ?? "", 10);
         if (Number.isFinite(index)) {
-          attachments = withoutAttachment(attachments, index);
+          const path = attachments[index]?.path ?? "";
+          const inline = /^inline:([^:]+):/.exec(path);
+          attachments = inline
+            ? attachments.filter((item) => !item.path.startsWith(`inline:${inline[1]}:`))
+            : withoutAttachment(attachments, index);
           render();
         }
         break;

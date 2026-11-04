@@ -1,8 +1,6 @@
 //! Tauri commands: the only way the UI talks to the harness.
 
-use std::path::Path;
-
-use cordial_core::session::{Attachment, AttachmentKind, Session, SessionSummary};
+use cordial_core::session::{Session, SessionSummary};
 use cordial_core::settings::Settings;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -63,6 +61,10 @@ pub struct AttachmentInput {
     pub path: String,
     /// "image" or "text".
     pub kind: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub inline_data: Option<String>,
 }
 
 #[tauri::command]
@@ -72,21 +74,6 @@ pub async fn send_message(
     text: String,
     attachments: Vec<AttachmentInput>,
 ) -> Result<(), String> {
-    let attachments = attachments
-        .into_iter()
-        .map(|input| Attachment {
-            kind: if input.kind == "image" {
-                AttachmentKind::Image
-            } else {
-                AttachmentKind::Text
-            },
-            name: Path::new(&input.path)
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| input.path.clone()),
-            path: input.path,
-        })
-        .collect();
     state.run_turn(session_id, text, attachments).await
 }
 
