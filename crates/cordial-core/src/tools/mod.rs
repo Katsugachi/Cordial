@@ -494,6 +494,12 @@ impl ToolRuntime {
 
     /// Reads a user attachment as text (used for file inputs).
     pub fn read_attachment_text(&self, path: &std::path::Path, max_chars: usize) -> Option<String> {
+        // PDFs are binary documents and may contain diagram-only information.
+        // Do not feed lossy binary data to the model as though it were the
+        // worksheet: unsupported attachments must be reported as unreadable.
+        if path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+            return None;
+        }
         if path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -518,6 +524,17 @@ mod tests {
             assert_eq!(parsed["name"], spec.name);
             assert!(parsed["parameters"]["type"] == "object");
         }
+    }
+
+    #[test]
+    fn pdf_is_not_misrepresented_as_text() {
+        let root = std::env::temp_dir().join(format!("cordial-pdf-refusal-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("worksheet.PDF");
+        std::fs::write(&path, b"%PDF-1.4\nnot actually readable as a worksheet").unwrap();
+        let runtime = ToolRuntime::new(root.clone(), root.join("scratch"), Effort::Medium).unwrap();
+        assert!(runtime.read_attachment_text(&path, 2000).is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

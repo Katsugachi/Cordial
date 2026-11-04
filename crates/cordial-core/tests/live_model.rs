@@ -380,6 +380,29 @@ async fn generated_complex_tasks_verify_artifacts() {
     }
 }
 
+/// Optional exact-file evaluation. The PDF is supplied by the test operator,
+/// not embedded in the repository permanently. This exercises the ordinary
+/// attachment path, without injecting pre-extracted text or answers.
+#[tokio::test]
+#[ignore = "requires an explicitly supplied worksheet and real model"]
+async fn user_pdf_worksheet_end_to_end() {
+    let Ok(path) = std::env::var("CORDIAL_WORKSHEET_PDF") else {
+        eprintln!("worksheet fixture not supplied; skipping optional test");
+        return;
+    };
+    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    let (session, answer) = live.turn(Effort::Task, false,
+        "Please complete the attached worksheet, show your reasoning for each answer, and use Python for calculations. Clean up any temporary scripts when finished.",
+        vec![Attachment { kind: AttachmentKind::Text, name: "worksheet.pdf".into(), path }]).await;
+    let calls: Vec<_> = session.messages.iter().flat_map(|m| &m.tool_calls).map(|c| c.name.as_str()).collect();
+    eprintln!("EVAL exact worksheet answer={answer:?}, plan={:?}, tools={calls:?}", session.plan);
+    assert!(answer.contains("75.40") && answer.contains("47.17") && answer.contains("98.534"),
+        "worksheet answers did not match independent calculations");
+    assert!(!session.plan.is_empty() && session.plan.iter().all(|s| s.status == cordial_core::session::PlanStatus::Done),
+        "worksheet task did not complete a checklist");
+    assert!(calls.iter().any(|name| name.contains("python")), "worksheet task did not run Python");
+}
+
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     let lower = haystack.to_lowercase();
     needles.iter().any(|needle| lower.contains(needle))
