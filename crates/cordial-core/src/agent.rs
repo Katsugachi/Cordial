@@ -610,18 +610,32 @@ impl<'a> Agent<'a> {
         thinking: bool,
     ) -> Result<GenerateOutput, CoreError> {
         let mut attempts = 0;
+        let mut tool_result_limit = self.config.max_tool_result_chars;
         loop {
             attempts += 1;
-            let request = self.build_request(session, turn_id, tools, system_suffix, thinking);
+            let request = self.build_request(session, turn_id, tools, system_suffix, thinking, tool_result_limit);
             match self.backend.generate(request, self.events).await {
                 Ok(output) => return Ok(output),
                 Err(err @ CoreError::ContextOverflow { .. }) => {
-                    if attempts >= 4 || !session.trim_oldest_turn() {
+                    if attempts >= 4 {
                         return Err(err);
                     }
-                    self.events.emit(AgentEvent::Notice {
-                        message: "Removed the oldest turn from context.".to_string(),
-                    });
+                    if session.trim_oldest_turn() {
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Removed the oldest turn from context.".to_string(),
+                        });
+                    } else {
+                        let reduced = (tool_result_limit / 2).max(512);
+                        let can_reduce = self.config.effort == Effort::Task && reduced < tool_result_limit
+                            && session.messages.iter().any(|m| m.role == crate::session::Role::Tool && m.content.chars().count() > reduced);
+                        if !can_reduce {
+                            return Err(err);
+                        }
+                        tool_result_limit = reduced;
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Shortened tool results in the model context; the full results remain in the conversation.".to_string(),
+                        });
+                    }
                 }
                 Err(err) => return Err(err),
             }
@@ -635,6 +649,7 @@ impl<'a> Agent<'a> {
         tools: &[ToolSpec],
         system_suffix: &str,
         thinking: bool,
+        tool_result_limit: usize,
     ) -> GenerateRequest {
         let mut system = prompt::system_prompt(
             self.config.effort,
@@ -688,7 +703,7 @@ impl<'a> Agent<'a> {
             messages: &session.messages,
             media_marker: DEFAULT_MEDIA_MARKER,
             thinking,
-            max_tool_result_chars: self.config.max_tool_result_chars,
+            max_tool_result_chars: tool_result_limit,
             keep_image_turns: self.config.keep_image_turns,
         });
         GenerateRequest {

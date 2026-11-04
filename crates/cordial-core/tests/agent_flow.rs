@@ -740,3 +740,28 @@ async fn task_context_exhaustion_gives_explicit_incomplete_message() {
         .contains("Task incomplete"));
     assert!(session.messages.last().unwrap().content.contains("context"));
 }
+
+#[tokio::test]
+async fn task_overflow_reduces_prompt_tool_results_without_deleting_history() {
+    use cordial_core::session::{PlanStatus, PlanStep};
+    let fixture = Fixture::new("compact-task");
+    let runtime = fixture.runtime(Effort::Task);
+    let mut session = Session::new();
+    session.push(Message::tool_result("old", "x".repeat(3000)));
+    session.plan.push(PlanStep { id: 0, title: "Research".into(), status: PlanStatus::Running, note: String::new() });
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Research\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let mut scripted = ScriptedBackend::new(vec![done, "Done."]);
+    scripted.fail_once(ScriptFailure::Overflow);
+    let mut backend = Backend::Scripted(scripted);
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
+        events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
+    let result = agent.run(&mut session, "Research this".into(), vec![]).await.unwrap();
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(session.messages[0].content.len(), 3000);
+    if let Backend::Scripted(scripted) = &backend {
+        assert!(scripted.requests[0].prompt.contains("[cut: content was longer]"));
+    } else { panic!("expected scripted backend"); }
+}
