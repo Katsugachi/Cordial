@@ -216,7 +216,9 @@ impl Live {
             skill: String::new(),
             thinking: effort != Effort::Low,
             max_output_tokens: 1_536,
-            max_tool_rounds: self.max_tool_rounds_override.unwrap_or_else(|| effort.max_tool_rounds()),
+            max_tool_rounds: self
+                .max_tool_rounds_override
+                .unwrap_or_else(|| effort.max_tool_rounds()),
             max_tool_result_chars: 6_000,
             keep_image_turns: 2,
             sampling: SamplingParams {
@@ -508,19 +510,33 @@ async fn rendered_pdf_worksheet_end_to_end() {
             if kind.is_dir() && contains_script(&entry.path())? {
                 return Ok(true);
             }
-            if kind.is_file() && entry.path().extension().and_then(|v| v.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("py")) {
+            if kind.is_file()
+                && entry
+                    .path()
+                    .extension()
+                    .and_then(|v| v.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+            {
                 return Ok(true);
             }
         }
         Ok(false)
     }
-    let leftover_scripts = contains_script(&live.workspace).unwrap() || contains_script(live._scratch.path()).unwrap();
+    let leftover_scripts =
+        contains_script(&live.workspace).unwrap() || contains_script(live._scratch.path()).unwrap();
     eprintln!("EVAL rendered worksheet answer={answer:?}, plan={:?}, tools={calls:?}, leftover_scripts={leftover_scripts}", session.plan);
     let numbers: Vec<f64> = regex::Regex::new(r"[+-]?[0-9]+(?:\.[0-9]+)?")
-        .unwrap().find_iter(&answer).filter_map(|m| m.as_str().parse().ok()).collect();
+        .unwrap()
+        .find_iter(&answer)
+        .filter_map(|m| m.as_str().parse().ok())
+        .collect();
     for expected in [75.39822368615503, 47.16990566028302, 98.53444594169618] {
-        assert!(numbers.iter().any(|actual| (actual - expected).abs() < 0.005),
-            "worksheet answer {expected} was missing or incorrect: {numbers:?}");
+        assert!(
+            numbers
+                .iter()
+                .any(|actual| (actual - expected).abs() < 0.005),
+            "worksheet answer {expected} was missing or incorrect: {numbers:?}"
+        );
     }
     assert!(
         !session.plan.is_empty()
@@ -531,10 +547,15 @@ async fn rendered_pdf_worksheet_end_to_end() {
         "worksheet checklist incomplete"
     );
     assert!(
-        calls.iter().filter(|name| name.contains("python")).any(|name| {
-            let prefix = format!("tool {name} ok=true:");
-            live.last_diagnostics.iter().any(|line| line.starts_with(&prefix))
-        }),
+        calls
+            .iter()
+            .filter(|name| name.contains("python"))
+            .any(|name| {
+                let prefix = format!("tool {name} ok=true:");
+                live.last_diagnostics
+                    .iter()
+                    .any(|line| line.starts_with(&prefix))
+            }),
         "Python was not successfully executed"
     );
     assert!(
