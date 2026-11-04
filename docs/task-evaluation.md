@@ -27,4 +27,8 @@ work blocked. PDF attachments and sandboxed Python execution are not currently
 supported; PDF diagrams require visual rendering, not text extraction alone.
 The fixture was removed from the current branch after the test, but remains in
 Git history, with the user's consent. This failed test does not validate other
-subjects or research tasks.
+subjects or research tasks. A separate `research_worksheets_architecture_and_english`
+live smoke test exercises web search, opening and citing a source, a generated
+geometry calculation, and literary analysis. It is triggered with `[research]`
+and independently checks selected answers; it is not a comprehensive held-out
+benchmark.

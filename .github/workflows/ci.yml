@@ -147,7 +147,8 @@ jobs:
     if: >-
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       ((github.event_name == 'workflow_dispatch' && inputs.live) ||
-      contains(github.event.head_commit.message, '[live]'))
+      contains(github.event.head_commit.message, '[live]') ||
+      contains(github.event.head_commit.message, '[research]'))
     runs-on: instabox-medium
     timeout-minutes: 120
     env:
@@ -165,7 +166,16 @@ jobs:
           key: lfm3-vl-2b-q4km-mmproj-q8
       - name: Test independent artifact verifier
         run: python3 scripts/ci/test_verify_task_artifacts.py
+      - name: Research worksheet evaluation
+        if: contains(github.event.head_commit.message, '[research]')
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/task-eval.log
       - name: Generated task evaluation
+        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
@@ -183,6 +193,7 @@ jobs:
           path: /tmp/task-eval.log
           if-no-files-found: ignore
       - name: Load check (one question)
+        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
@@ -190,6 +201,7 @@ jobs:
           cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact answers_a_plain_factual_question_briefly 2>&1 | tee -a /tmp/live.log
       - name: Full suite
+        if: ${{ !contains(github.event.head_commit.message, '[research]') }}
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
