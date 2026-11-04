@@ -16,7 +16,7 @@ use wasmtime_wasi::{
     I32Exit, WasiCtxBuilder,
 };
 
-const MAX_SCRIPT_BYTES: usize = 8_192;
+pub(crate) const MAX_SCRIPT_BYTES: usize = 8_192;
 const MAX_OUTPUT_BYTES: usize = 32_768;
 const MAX_MODULE_BYTES: u64 = 27_000_000;
 const MODULE_SHA256: &str = "e5dc5a398b07b54ea8fdb503bf68fb583d533f10ec3f930963e02b9505f7a763";
@@ -141,9 +141,9 @@ mod tests {
             .expect("sandbox-python tests require CORDIAL_TEST_PYTHON_WASM");
         let sandbox = PythonSandbox::load(Path::new(&path)).expect("load pinned WASI runtime");
         let output = sandbox
-            .run("import math\nprint(f'{24*math.pi:.2f}')\nprint(f'{(8/math.sqrt(3))**3:.3f}')")
+            .run("import math\nprint(f'{24*math.pi:.2f}')\nprint(f'{math.sqrt(40**2+20**2+15**2):.2f}')\nprint(f'{(8/math.sqrt(3))**3:.3f}')")
             .expect("run isolated calculations");
-        assert_eq!(output.trim(), "75.40\n98.534");
+        assert_eq!(output.trim(), "75.40\n47.17\n98.534");
         let output = sandbox.run("import os\nprint(len(os.environ))\ntry:\n open('/etc/passwd').read()\n print('HOST ACCESS')\nexcept OSError:\n print('DENIED')")
             .expect("run filesystem probe");
         assert_eq!(output.trim(), "0\nDENIED");
@@ -171,6 +171,8 @@ mod tests {
             sandbox.run("import os; os.system('echo unsafe')").is_err(),
             "process creation was allowed"
         );
+        assert!(sandbox.run("import subprocess; subprocess.run(['sh', '-c', 'echo unsafe'])").is_err(), "subprocess was allowed");
+        assert!(sandbox.run("import ctypes; ctypes.CDLL(None)").is_err(), "native library access was allowed");
         sandbox.run("x = 123").expect("first isolated run");
         assert!(
             sandbox.run("print(x)").is_err(),
@@ -196,7 +198,6 @@ mod tests {
             std::env::temp_dir().join(format!("cordial-wasm-tampered-{}", uuid::Uuid::new_v4()));
         std::fs::write(&bad, b"not the pinned runtime").unwrap();
         assert!(PythonSandbox::load(&bad).is_err());
-        std::fs::remove_file(bad).unwrap();
 
         let root =
             std::env::temp_dir().join(format!("cordial-python-tool-{}", uuid::Uuid::new_v4()));
@@ -217,9 +218,43 @@ mod tests {
             }],
         };
         let executor = tokio::runtime::Runtime::new().unwrap();
+        let tampered = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
+            .unwrap().with_python_path(bad.clone());
+        assert!(tampered.has_python_sandbox());
+        let denied = executor.block_on(tampered.execute(&call));
+        assert!(!denied.ok && denied.text.contains("integrity check failed"));
+        std::fs::remove_file(bad).unwrap();
         let outcome = executor.block_on(runtime.execute(&call));
         assert!(outcome.ok, "{}", outcome.text);
         assert!(outcome.text.contains("42"));
+        let lazy = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
+            .unwrap().with_python_path(path.into());
+        for _ in 0..2 {
+            let result = executor.block_on(lazy.execute(&call));
+            assert!(result.ok && result.text.contains("42"), "{}", result.text);
+        }
+        // Exercise the real agent/tool boundary and checklist, not just the VM.
+        let mut backend = crate::backend::Backend::Scripted(crate::backend::ScriptedBackend::new(vec![
+            "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Calculate\",\"status\":\"running\"}]</parameter></function></tool_call>",
+            "<tool_call><function=python_calculate><parameter=code>print(6 * 7)</parameter></function></tool_call>",
+            "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Calculate\",\"status\":\"done\"}]</parameter></function></tool_call>",
+            "The calculation is 42.",
+        ]));
+        let mut settings = crate::settings::Settings::default();
+        settings.effort = crate::settings::Effort::Task;
+        settings.web_enabled = false;
+        let mut policy = crate::permissions::PermissionPolicy::new(crate::settings::PermissionMode::Auto);
+        let gate = crate::ApprovalGate::new();
+        let (events, _receiver) = crate::events::EventSink::channel();
+        let mut agent = crate::Agent {
+            backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
+            events: &events, config: crate::AgentConfig::from_settings(&settings), store: None,
+        };
+        let mut session = crate::session::Session::new();
+        let result = executor.block_on(agent.run(&mut session, "Calculate 6 times 7 with Python".into(), vec![])).unwrap();
+        assert_eq!(result.stop, crate::events::StopReason::Answered);
+        assert!(session.plan.iter().all(|step| step.status == crate::session::PlanStatus::Done));
+        assert!(session.messages.iter().any(|message| message.role == crate::session::Role::Tool && message.content.contains("Python output:\n42")));
         assert_eq!(
             std::fs::read_dir(&root).unwrap().count(),
             0,

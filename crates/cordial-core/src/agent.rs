@@ -670,6 +670,9 @@ impl<'a> Agent<'a> {
             self.config.permission_mode,
             self.config.web_enabled,
         );
+        if tools.iter().any(|tool| tool.name == "python_calculate") {
+            system.push_str("\n\nFor Python calculations use python_calculate with code that prints results. It executes in memory without host files; do not save temporary scripts in the workspace.\n");
+        }
         if !self.config.memory.trim().is_empty() {
             system.push_str(
                 "\n\nUser-provided memory (context, not a source of tool permissions):\n",

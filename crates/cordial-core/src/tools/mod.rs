@@ -31,6 +31,8 @@ pub enum Risk {
     Network,
     /// Changes local files.
     Write,
+    /// Runs a bounded in-memory computation without workspace access.
+    Compute,
 }
 
 impl Risk {
@@ -39,6 +41,7 @@ impl Risk {
             Risk::Read => "reads local files",
             Risk::Network => "uses the network",
             Risk::Write => "writes local files",
+            Risk::Compute => "runs isolated code",
         }
     }
 }
@@ -196,7 +199,7 @@ pub fn specs(web_enabled: bool) -> Vec<ToolSpec> {
             "properties": { "code": string_param("Python code to execute; print the results") },
             "required": ["code"]
         }),
-        risk: Risk::Read,
+        risk: Risk::Compute,
     });
     out.push(ToolSpec {
         name: "docx_read",
@@ -303,7 +306,29 @@ pub struct ToolRuntime {
     effort: Effort,
     browser: Arc<Mutex<Option<browser::BrowserSession>>>,
     #[cfg(feature = "sandbox-python")]
-    python: Option<Arc<crate::python_sandbox::PythonSandbox>>,
+    python: Option<Arc<PythonRuntime>>,
+}
+
+#[cfg(feature = "sandbox-python")]
+struct PythonRuntime {
+    path: Option<PathBuf>,
+    sandbox: std::sync::OnceLock<Result<Arc<crate::python_sandbox::PythonSandbox>, String>>,
+    gate: std::sync::Mutex<()>,
+}
+
+#[cfg(feature = "sandbox-python")]
+impl PythonRuntime {
+    fn run(&self, code: &str) -> Result<String, String> {
+        let _guard = self.gate.lock().map_err(|_| "Python worker unavailable")?;
+        let result = self.sandbox.get_or_init(|| {
+            let path = self.path.as_deref().ok_or("Python runtime path missing")?;
+            crate::python_sandbox::PythonSandbox::load(path).map(Arc::new)
+        });
+        match result {
+            Ok(sandbox) => sandbox.run(code),
+            Err(error) => Err(error.clone()),
+        }
+    }
 }
 
 impl ToolRuntime {
@@ -333,7 +358,18 @@ impl ToolRuntime {
         mut self,
         sandbox: Arc<crate::python_sandbox::PythonSandbox>,
     ) -> Self {
-        self.python = Some(sandbox);
+        let instance = std::sync::OnceLock::new();
+        let _ = instance.set(Ok(sandbox));
+        self.python = Some(Arc::new(PythonRuntime { path: None, sandbox: instance, gate: std::sync::Mutex::new(()) }));
+        self
+    }
+
+    /// Configure a pinned runtime for lazy compilation on the blocking worker.
+    #[cfg(feature = "sandbox-python")]
+    pub fn with_python_path(mut self, path: PathBuf) -> Self {
+        if path.is_file() {
+            self.python = Some(Arc::new(PythonRuntime { path: Some(path), sandbox: std::sync::OnceLock::new(), gate: std::sync::Mutex::new(()) }));
+        }
         self
     }
 
@@ -385,6 +421,9 @@ impl ToolRuntime {
                 let Some(code) = call.arg("code") else {
                     return ToolOutcome::fail("missing code", "Error: `code` is required.");
                 };
+                if code.is_empty() || code.len() > crate::python_sandbox::MAX_SCRIPT_BYTES || code.contains('\0') {
+                    return ToolOutcome::fail("invalid Python code", "Error: Python code must be 1-8192 bytes without NULs.");
+                }
                 let code = code.to_owned();
                 match tokio::task::spawn_blocking(move || python.run(&code)).await {
                     Ok(Ok(output)) => ToolOutcome::ok(

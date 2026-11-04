@@ -280,7 +280,11 @@ pub fn system_prompt(
     );
 
     prompt.push_str("Answering\n");
-    prompt.push_str("- Lead with the answer, then at most three short paragraphs of support. No preamble, no restating the question, no filler.\n");
+    if effort == crate::settings::Effort::Task {
+        prompt.push_str("- Address every part of the task. Show the requested reasoning and verification; use as much space as needed. Avoid filler.\n");
+    } else {
+        prompt.push_str("- Lead with the answer, then at most three short paragraphs of support. No preamble, no restating the question, no filler.\n");
+    }
     prompt.push_str("- Use plain words and short sentences. Do not use em dashes. No emoji, no bold headers, no bullet lists unless you are listing things.\n");
     prompt.push_str(
         "- If something is uncertain, say so in one sentence and say how you would check it.\n\n",
@@ -288,7 +292,11 @@ pub fn system_prompt(
 
     prompt.push_str("Facts\n");
     prompt.push_str(&format!("- Today is {today}. Anything that changes (news, prices, sport, releases, people, places) needs a web check first.\n"));
-    prompt.push_str("- Search, open the best result, then answer. Put the source URL in brackets after the sentence it supports, at most three links.\n");
+    if web_enabled {
+        prompt.push_str("- Search, open the best result, then answer. Put the source URL in brackets after the sentence it supports, at most three links.\n");
+    } else {
+        prompt.push_str("- The web is disabled. Do not pretend you checked online; identify facts you could not verify.\n");
+    }
     prompt.push_str("- Never invent URLs, quotes, dates, prices or numbers. If a tool fails, say the web is unavailable and mark what you say as unchecked.\n\n");
 
     prompt.push_str("Tools\n");
@@ -298,7 +306,7 @@ pub fn system_prompt(
     } else {
         prompt.push_str("- Web tools are switched off. Say so if a question needs the internet.\n");
     }
-    prompt.push_str("- Files live in the workspace folder. Call list_files or read_file before asking the user for a path.\n");
+    prompt.push_str("- Attached text and images are already included in the message. Use them directly; do not search the workspace for an attachment. PDF page text can omit diagram labels: inspect the page image and do not invent unreadable measurements. For other workspace files, use list_files or read_file before asking for a path.\n");
     prompt.push_str("- run_command executes one read-only workspace command: grep, find, ls, cat, head, tail, wc, stat or pwd. It is not a shell; destructive commands, pipes and redirects are refused.\n");
     prompt.push_str("- For Word worksheets, use docx_read to get numbered paragraphs, research each part, then docx_edit to write answers into a copy. Verify the edited file with docx_read.\n");
     if effort == crate::settings::Effort::Task {
@@ -526,6 +534,21 @@ mod tests {
         assert!(prompt.contains("Effort: medium"));
         assert!(prompt.contains("web_search") || prompt.contains("Search"));
         assert!(!prompt.contains("None"));
+    }
+
+    #[test]
+    fn task_prompt_allows_full_work_and_uses_attachments_directly() {
+        let prompt = system_prompt(
+            crate::settings::Effort::Task,
+            crate::settings::PermissionMode::Auto,
+            false,
+        );
+        assert!(prompt.contains("Address every part"));
+        assert!(!prompt.contains("at most three short paragraphs"));
+        assert!(prompt.contains("do not search the workspace for an attachment"));
+        assert!(prompt.contains("do not invent unreadable measurements"));
+        assert!(prompt.contains("Do not pretend you checked online"));
+        assert!(!prompt.contains("Search, open the best result"));
     }
 
     #[test]

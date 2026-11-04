@@ -2,7 +2,7 @@
 //!
 //! Two modes, as the product asks for:
 //!
-//! * **Auto** — reads and network calls run immediately; anything that writes to
+//! * **Auto** — reads, isolated computations and network calls run immediately; anything that writes to
 //!   disk asks once, then is remembered for the session.
 //! * **Manual** — every tool call waits for the user.
 //!
@@ -76,7 +76,7 @@ impl PermissionPolicy {
             PermissionMode::Manual => Permission::Ask { risk },
             PermissionMode::Auto => match risk {
                 Risk::Write => Permission::Ask { risk },
-                Risk::Read | Risk::Network => Permission::Allow,
+                Risk::Read | Risk::Network | Risk::Compute => Permission::Allow,
             },
         }
     }
@@ -120,6 +120,13 @@ mod tests {
             policy.evaluate(&call("web_fetch")),
             Permission::Ask { .. }
         ));
+    }
+
+    #[cfg(feature = "sandbox-python")]
+    #[test]
+    fn isolated_python_follows_the_permission_mode() {
+        assert_eq!(PermissionPolicy::new(PermissionMode::Auto).evaluate(&call("python_calculate")), Permission::Allow);
+        assert_eq!(PermissionPolicy::new(PermissionMode::Manual).evaluate(&call("python_calculate")), Permission::Ask { risk: Risk::Compute });
     }
 
     #[test]
