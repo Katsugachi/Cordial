@@ -390,11 +390,15 @@ impl<'a> Agent<'a> {
                     session.push(result);
                     continue;
                 }
-                let previous_statuses: Vec<_> = session.plan.iter().map(|step| step.status).collect();
+                let previous_statuses: Vec<_> =
+                    session.plan.iter().map(|step| step.status).collect();
                 let ok = self.execute_call(session, &turn_id, call).await;
                 if self.config.effort == Effort::Task && call.name == "update_plan" && ok {
                     let statuses: Vec<_> = session.plan.iter().map(|step| step.status).collect();
-                    if !previous_statuses.is_empty() && previous_statuses == statuses && !plan_complete(session) {
+                    if !previous_statuses.is_empty()
+                        && previous_statuses == statuses
+                        && !plan_complete(session)
+                    {
                         unchanged_plan_updates += 1;
                     } else {
                         unchanged_plan_updates = 0;
@@ -403,7 +407,10 @@ impl<'a> Agent<'a> {
                         unchanged_plan_updates = 0;
                         suppress_plan_next = true;
                         retry_instruction = "The checklist has not progressed. Work on the next step now, using an appropriate tool or the supplied attachments. Do not update the checklist again until work is done or blocked.";
-                        self.events.emit(AgentEvent::Notice { message: "The checklist has not changed; continuing with the work.".to_string() });
+                        self.events.emit(AgentEvent::Notice {
+                            message: "The checklist has not changed; continuing with the work."
+                                .to_string(),
+                        });
                     }
                 } else if call.name != "update_plan" {
                     unchanged_plan_updates = 0;

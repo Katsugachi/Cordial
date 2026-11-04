@@ -427,7 +427,10 @@ async fn research_worksheets_architecture_and_english() {
     )).unwrap();
     let (architecture, arch_answer) = live.turn(Effort::Task, true,
         "Complete every question in architecture.txt. Research factual claims, cite source URLs, and explain each answer.", vec![]).await;
-    eprintln!("EVAL architecture interim answer={arch_answer:?}, plan={:?}", architecture.plan);
+    eprintln!(
+        "EVAL architecture interim answer={arch_answer:?}, plan={:?}",
+        architecture.plan
+    );
     std::fs::write(live.workspace.join("english.txt"),
         "English worksheet\n1. In the sentence 'The wind whispered secrets to the street', identify and explain the figure of speech and its effect.\n2. In 'The library was a lighthouse in the storm', identify and explain the figure of speech and its effect.\n3. Compare how the two images make an ordinary subject feel.\n4. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n").unwrap();
     let (english, english_answer) = live.turn(Effort::Task, true,
@@ -551,9 +554,21 @@ async fn rendered_pdf_worksheet_end_to_end() {
     let leftover_scripts =
         contains_script(&live.workspace).unwrap() || contains_script(live._scratch.path()).unwrap();
     eprintln!("EVAL rendered worksheet answer={answer:?}, plan={:?}, tools={calls:?}, leftover_scripts={leftover_scripts}", session.plan);
-    for call in session.messages.iter().flat_map(|message| &message.tool_calls).filter(|call| call.name == "python_calculate") {
-        let result = session.messages.iter().find(|message| message.tool_call_id.as_deref() == Some(call.id.as_str()));
-        eprintln!("EVAL python code={:?}, result={:?}", call.arg("code"), result.map(|message| &message.content));
+    for call in session
+        .messages
+        .iter()
+        .flat_map(|message| &message.tool_calls)
+        .filter(|call| call.name == "python_calculate")
+    {
+        let result = session
+            .messages
+            .iter()
+            .find(|message| message.tool_call_id.as_deref() == Some(call.id.as_str()));
+        eprintln!(
+            "EVAL python code={:?}, result={:?}",
+            call.arg("code"),
+            result.map(|message| &message.content)
+        );
     }
     // Some models emit an extra reasoning terminator even in no-thinking mode;
     // do not count an intermediate draft as the final answer.
