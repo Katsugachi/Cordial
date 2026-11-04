@@ -531,16 +531,32 @@ async fn rendered_pdf_worksheet_end_to_end() {
         .map(|m| m.as_str())
         .collect();
     // Questions 1 and 3 explicitly require two and three decimal places.
-    assert!(numbers.contains(&"75.40") && numbers.contains(&"98.534"),
-        "answers did not match the required values and precision: {numbers:?}");
-    assert!(numbers.iter().filter_map(|n| n.parse::<f64>().ok())
-        .any(|actual| (actual - 47.16990566028302).abs() < 0.005),
-        "the independently calculated box diagonal was missing: {numbers:?}");
+    assert!(
+        numbers.contains(&"75.40") && numbers.contains(&"98.534"),
+        "answers did not match the required values and precision: {numbers:?}"
+    );
+    assert!(
+        numbers
+            .iter()
+            .filter_map(|n| n.parse::<f64>().ok())
+            .any(|actual| (actual - 47.16990566028302).abs() < 0.005),
+        "the independently calculated box diagonal was missing: {numbers:?}"
+    );
     let lower = answer.to_ascii_lowercase();
-    assert!(regex::Regex::new(r"\b(yes|will fit|can fit|fits inside|fits in|does fit)\b").unwrap().is_match(&lower),
-        "the rod-fit conclusion was missing");
-    assert!(!regex::Regex::new(r"\b(does not fit|doesn't fit|will not fit|won't fit|cannot fit|can't fit)\b").unwrap().is_match(&lower),
-        "the answer contradicts the rod-fit conclusion");
+    assert!(
+        regex::Regex::new(r"\b(yes|will fit|can fit|fits inside|fits in|does fit)\b")
+            .unwrap()
+            .is_match(&lower),
+        "the rod-fit conclusion was missing"
+    );
+    assert!(
+        !regex::Regex::new(
+            r"\b(does not fit|doesn't fit|will not fit|won't fit|cannot fit|can't fit)\b"
+        )
+        .unwrap()
+        .is_match(&lower),
+        "the answer contradicts the rod-fit conclusion"
+    );
     assert!(
         !session.plan.is_empty()
             && session
