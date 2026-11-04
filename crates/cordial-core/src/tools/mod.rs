@@ -497,7 +497,11 @@ impl ToolRuntime {
         // PDFs are binary documents and may contain diagram-only information.
         // Do not feed lossy binary data to the model as though it were the
         // worksheet: unsupported attachments must be reported as unreadable.
-        if path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+        {
             return None;
         }
         if path
@@ -528,7 +532,8 @@ mod tests {
 
     #[test]
     fn pdf_is_not_misrepresented_as_text() {
-        let root = std::env::temp_dir().join(format!("cordial-pdf-refusal-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("cordial-pdf-refusal-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("worksheet.PDF");
         std::fs::write(&path, b"%PDF-1.4\nnot actually readable as a worksheet").unwrap();
