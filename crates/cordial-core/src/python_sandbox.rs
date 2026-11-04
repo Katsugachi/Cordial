@@ -265,13 +265,15 @@ mod tests {
             crate::permissions::PermissionPolicy::new(crate::settings::PermissionMode::Auto);
         let gate = crate::ApprovalGate::new();
         let (events, _receiver) = crate::events::EventSink::channel();
+        let mut config = crate::AgentConfig::from_settings(&settings);
+        config.thinking = false;
         let mut agent = crate::Agent {
             backend: &mut backend,
             tools: &runtime,
             policy: &mut policy,
             approvals: &gate,
             events: &events,
-            config: crate::AgentConfig::from_settings(&settings),
+            config,
             store: None,
         };
         let mut session = crate::session::Session::new();
@@ -283,15 +285,9 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(result.stop, crate::events::StopReason::Answered);
-        assert!(session
-            .plan
-            .iter()
-            .all(|step| step.status == crate::session::PlanStatus::Done));
-        assert!(session
-            .messages
-            .iter()
-            .any(|message| message.role == crate::session::Role::Tool
-                && message.content.contains("Python output:\n42")));
+        assert!(!session.plan.is_empty() && session.plan.iter().all(|step| step.status == crate::session::PlanStatus::Done), "plan: {:?}", session.plan);
+        assert!(session.messages.iter().any(|message| message.role == crate::session::Role::Tool
+                && message.content.contains("Python output:\n42")), "messages: {:?}", session.messages);
         assert_eq!(
             std::fs::read_dir(&root).unwrap().count(),
             0,

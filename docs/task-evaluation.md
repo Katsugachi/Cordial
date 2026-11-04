@@ -29,8 +29,12 @@ validation. The follow-up rendered-page evaluation on Instabox (run 41815625401)
 reached a three-question checklist but exhausted a 12-round test budget without
 solving the worksheet or running Python. The ordinary desktop, UI, Rust and
 inference checks passed. A prior run was superseded after more than 40 minutes
-without a final result. Sandboxed Python execution is not currently supported.
-PDF diagrams require visual rendering, not text extraction alone.
+without a final result. With the experimental Python tool available in the
+live harness, [run 41908510800](https://github.com/Katsugachi/Cordial/actions/runs/41908510800)
+again exhausted its budget: the model repeatedly updated a pending checklist
+and did not use Python. The isolated runtime passed its Linux security tests,
+but it is not enabled in the desktop app. PDF diagrams require visual rendering,
+not text extraction alone.
 The fixture was removed from the current branch after the test, but remains in
 Git history, with the user's consent. This failed test does not validate other
 subjects or research tasks. A separate `research_worksheets_architecture_and_english`
