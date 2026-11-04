@@ -30,12 +30,23 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
     let mut prepared = Vec::with_capacity(inputs.len());
     let mut inline_count = 0;
     for input in inputs {
-        let kind = if input.kind == "image" { AttachmentKind::Image } else { AttachmentKind::Text };
+        let kind = if input.kind == "image" {
+            AttachmentKind::Image
+        } else {
+            AttachmentKind::Text
+        };
         let name = input.name.as_deref().unwrap_or_else(|| {
-            Path::new(&input.path).file_name().and_then(|s| s.to_str()).unwrap_or("attachment")
+            Path::new(&input.path)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("attachment")
         });
         let name: String = name.chars().filter(|c| !c.is_control()).take(160).collect();
-        let attachment = Attachment { kind, name, path: input.path.clone() };
+        let attachment = Attachment {
+            kind,
+            name,
+            path: input.path.clone(),
+        };
         let (bytes, extension) = if let Some(data) = input.inline_data {
             inline_count += 1;
             if inline_count > MAX_INLINE_ITEMS || !input.path.starts_with("inline:") {
@@ -43,11 +54,14 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
             }
             match input.kind.as_str() {
                 "image" => {
-                    let encoded = data.strip_prefix(PNG_PREFIX).ok_or("Expected a PNG image.")?;
+                    let encoded = data
+                        .strip_prefix(PNG_PREFIX)
+                        .ok_or("Expected a PNG image.")?;
                     if encoded.len() > (MAX_INLINE_IMAGE_BYTES + 2) / 3 * 4 {
                         return Err("PDF page image is too large.".into());
                     }
-                    let decoded = base64::engine::general_purpose::STANDARD.decode(encoded)
+                    let decoded = base64::engine::general_purpose::STANDARD
+                        .decode(encoded)
                         .map_err(|_| "Invalid PDF page image encoding.")?;
                     let sanitized = sanitize_png(&decoded)?;
                     (Some(sanitized), "png")
@@ -63,14 +77,23 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
         } else {
             (None, "")
         };
-        prepared.push(Prepared { attachment, bytes, extension });
+        prepared.push(Prepared {
+            attachment,
+            bytes,
+            extension,
+        });
     }
     if inline_count == 0 {
         return Ok(prepared.into_iter().map(|p| p.attachment).collect());
     }
 
-    fs::create_dir_all(scratch).map_err(|err| format!("Cannot create attachment scratch folder: {err}"))?;
-    let added: u64 = prepared.iter().filter_map(|p| p.bytes.as_ref()).map(|bytes| bytes.len() as u64).sum();
+    fs::create_dir_all(scratch)
+        .map_err(|err| format!("Cannot create attachment scratch folder: {err}"))?;
+    let added: u64 = prepared
+        .iter()
+        .filter_map(|p| p.bytes.as_ref())
+        .map(|bytes| bytes.len() as u64)
+        .sum();
     if scratch_usage(scratch)?.saturating_add(added) > MAX_SCRATCH_BYTES {
         return Err("PDF attachment storage is full; review the PDF scratch folder before attaching more pages.".into());
     }
@@ -79,9 +102,14 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
     for (index, item) in prepared.iter_mut().enumerate() {
         if let Some(bytes) = &item.bytes {
             let file = directory.join(format!("page-{index}.{}", item.extension));
-            let mut handle = OpenOptions::new().write(true).create_new(true).open(&file)
+            let mut handle = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&file)
                 .map_err(|err| format!("Cannot save PDF page: {err}"))?;
-            handle.write_all(bytes).map_err(|err| format!("Cannot save PDF page: {err}"))?;
+            handle
+                .write_all(bytes)
+                .map_err(|err| format!("Cannot save PDF page: {err}"))?;
             item.attachment.path = file.to_string_lossy().into_owned();
         }
     }
@@ -91,14 +119,21 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
 fn scratch_usage(root: &Path) -> Result<u64, String> {
     let mut total = 0u64;
     for (index, entry) in fs::read_dir(root).map_err(|e| e.to_string())?.enumerate() {
-        if index >= 1_000 { return Err("Too many PDF attachment folders.".into()); }
+        if index >= 1_000 {
+            return Err("Too many PDF attachment folders.".into());
+        }
         let entry = entry.map_err(|e| e.to_string())?;
         let kind = entry.file_type().map_err(|e| e.to_string())?;
         if !kind.is_dir() || kind.is_symlink() {
             return Err("Unexpected entry in PDF attachment storage.".into());
         }
-        for (index, child) in fs::read_dir(entry.path()).map_err(|e| e.to_string())?.enumerate() {
-            if index >= MAX_INLINE_ITEMS { return Err("Unexpected entries in PDF attachment folder.".into()); }
+        for (index, child) in fs::read_dir(entry.path())
+            .map_err(|e| e.to_string())?
+            .enumerate()
+        {
+            if index >= MAX_INLINE_ITEMS {
+                return Err("Unexpected entries in PDF attachment folder.".into());
+            }
             let child = child.map_err(|e| e.to_string())?;
             let kind = child.file_type().map_err(|e| e.to_string())?;
             if !kind.is_file() || kind.is_symlink() {
@@ -111,7 +146,11 @@ fn scratch_usage(root: &Path) -> Result<u64, String> {
 }
 
 fn sanitize_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    if bytes.len() > MAX_INLINE_IMAGE_BYTES || bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
+    if bytes.len() > MAX_INLINE_IMAGE_BYTES
+        || bytes.len() < 24
+        || &bytes[..8] != b"\x89PNG\r\n\x1a\n"
+        || &bytes[12..16] != b"IHDR"
+    {
         return Err("Invalid or oversized PDF page image.".into());
     }
     let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
@@ -122,24 +161,41 @@ fn sanitize_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
     // Decode with explicit limits, then re-encode only pixel data. This rejects
     // malformed streams and discards metadata and trailing bytes before the
     // image reaches the model's native decoder.
-    let decoder = png::Decoder::new_with_limits(std::io::Cursor::new(bytes), png::Limits { bytes: 16_000_000 });
+    let decoder = png::Decoder::new_with_limits(
+        std::io::Cursor::new(bytes),
+        png::Limits { bytes: 16_000_000 },
+    );
     let mut reader = decoder.read_info().map_err(|_| "Invalid PDF page PNG.")?;
-    if reader.info().bit_depth != png::BitDepth::Eight || reader.info().color_type == png::ColorType::Indexed {
+    if reader.info().bit_depth != png::BitDepth::Eight
+        || reader.info().color_type == png::ColorType::Indexed
+    {
         return Err("Unsupported PDF page PNG format.".into());
     }
-    let size = reader.output_buffer_size().ok_or("Invalid PDF page PNG dimensions.")?;
-    if size > 8_000_000 { return Err("Decoded PDF page is too large.".into()); }
+    let size = reader
+        .output_buffer_size()
+        .ok_or("Invalid PDF page PNG dimensions.")?;
+    if size > 8_000_000 {
+        return Err("Decoded PDF page is too large.".into());
+    }
     let mut pixels = vec![0; size];
-    let info = reader.next_frame(&mut pixels).map_err(|_| "Invalid PDF page PNG data.")?;
+    let info = reader
+        .next_frame(&mut pixels)
+        .map_err(|_| "Invalid PDF page PNG data.")?;
     let mut sanitized = Vec::new();
     {
         let mut encoder = png::Encoder::new(&mut sanitized, width, height);
         encoder.set_color(info.color_type);
         encoder.set_depth(info.bit_depth);
-        let mut writer = encoder.write_header().map_err(|_| "Could not prepare PDF page.")?;
-        writer.write_image_data(&pixels[..info.buffer_size()]).map_err(|_| "Could not prepare PDF page.")?;
+        let mut writer = encoder
+            .write_header()
+            .map_err(|_| "Could not prepare PDF page.")?;
+        writer
+            .write_image_data(&pixels[..info.buffer_size()])
+            .map_err(|_| "Could not prepare PDF page.")?;
     }
-    if sanitized.len() > MAX_INLINE_IMAGE_BYTES { return Err("Prepared PDF page is too large.".into()); }
+    if sanitized.len() > MAX_INLINE_IMAGE_BYTES {
+        return Err("Prepared PDF page is too large.".into());
+    }
     Ok(sanitized)
 }
 
@@ -148,7 +204,12 @@ mod tests {
     use super::*;
 
     fn input(kind: &str, data: &str) -> AttachmentInput {
-        AttachmentInput { path: "inline:test:0".into(), kind: kind.into(), name: Some("worksheet".into()), inline_data: Some(data.into()) }
+        AttachmentInput {
+            path: "inline:test:0".into(),
+            kind: kind.into(),
+            name: Some("worksheet".into()),
+            inline_data: Some(data.into()),
+        }
     }
 
     #[test]
@@ -165,11 +226,17 @@ mod tests {
     fn page_image_and_text_are_persisted_for_the_session() {
         let root = std::env::temp_dir().join(format!("cordial-pdf-pages-{}", uuid::Uuid::new_v4()));
         let image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAAElFTkSuQmCC";
-        let pages = prepare(vec![input("image", image), input("text", "Question 1")], &root).unwrap();
+        let pages = prepare(
+            vec![input("image", image), input("text", "Question 1")],
+            &root,
+        )
+        .unwrap();
         assert_eq!(pages.len(), 2);
         assert_eq!(pages[0].kind, AttachmentKind::Image);
         assert_eq!(pages[1].kind, AttachmentKind::Text);
-        assert!(fs::read(&pages[0].path).unwrap().starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(fs::read(&pages[0].path)
+            .unwrap()
+            .starts_with(b"\x89PNG\r\n\x1a\n"));
         assert_eq!(fs::read_to_string(&pages[1].path).unwrap(), "Question 1");
         fs::remove_dir_all(root).unwrap();
     }
@@ -203,7 +270,9 @@ mod tests {
         let mut png = base64::engine::general_purpose::STANDARD.decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAANSURBVAiZY2BgYPgPAAEEAQB9ssjfAAAAAElFTkSuQmCC").unwrap();
         png.extend_from_slice(b"untrusted trailing content");
         let sanitized = sanitize_png(&png).unwrap();
-        assert!(!sanitized.windows(b"untrusted trailing content".len()).any(|window| window == b"untrusted trailing content"));
+        assert!(!sanitized
+            .windows(b"untrusted trailing content".len())
+            .any(|window| window == b"untrusted trailing content"));
         png[16..20].copy_from_slice(&100_000u32.to_be_bytes());
         assert!(sanitize_png(&png).is_err());
         assert!(sanitize_png(&png[..24]).is_err());

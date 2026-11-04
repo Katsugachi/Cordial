@@ -565,8 +565,10 @@ dependencies = [
 name = "cordial-app"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "cordial-core",
  "cordial-llama",
+ "png",
  "serde",
  "serde_json",
  "tauri",
@@ -576,6 +578,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

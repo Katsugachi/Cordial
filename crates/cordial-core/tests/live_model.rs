@@ -477,18 +477,44 @@ async fn rendered_pdf_worksheet_end_to_end() {
         return;
     };
     let text_path = std::env::var("CORDIAL_PDF_PAGE_TEXT").expect("rendered PDF text required");
-    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    let Some(mut live) = Live::boot().await else {
+        panic!("model unavailable")
+    };
     let (session, answer) = live.turn(Effort::Task, false,
         "Complete the attached worksheet. Show reasoning for each answer. Use Python for calculations and clean up any temporary scripts.",
         vec![Attachment { kind: AttachmentKind::Image, name: "worksheet.pdf, page 1 (image)".into(), path: image },
              Attachment { kind: AttachmentKind::Text, name: "worksheet.pdf, page 1 (text)".into(), path: text_path }]).await;
-    let calls: Vec<_> = session.messages.iter().flat_map(|m| &m.tool_calls).map(|c| c.name.as_str()).collect();
-    let leftover_scripts = std::fs::read_dir(&live.workspace).unwrap().flatten().any(|entry| entry.path().extension().and_then(|v| v.to_str()) == Some("py"));
+    let calls: Vec<_> = session
+        .messages
+        .iter()
+        .flat_map(|m| &m.tool_calls)
+        .map(|c| c.name.as_str())
+        .collect();
+    let leftover_scripts = std::fs::read_dir(&live.workspace)
+        .unwrap()
+        .flatten()
+        .any(|entry| entry.path().extension().and_then(|v| v.to_str()) == Some("py"));
     eprintln!("EVAL rendered worksheet answer={answer:?}, plan={:?}, tools={calls:?}, leftover_scripts={leftover_scripts}", session.plan);
-    assert!(answer.contains("75.40") && answer.contains("47.17") && answer.contains("98.534"), "worksheet answers did not match independent calculations");
-    assert!(!session.plan.is_empty() && session.plan.iter().all(|s| s.status == cordial_core::session::PlanStatus::Done), "worksheet checklist incomplete");
-    assert!(calls.iter().any(|name| name.contains("python")), "Python was not executed");
-    assert!(!leftover_scripts, "a temporary Python script was left behind");
+    assert!(
+        answer.contains("75.40") && answer.contains("47.17") && answer.contains("98.534"),
+        "worksheet answers did not match independent calculations"
+    );
+    assert!(
+        !session.plan.is_empty()
+            && session
+                .plan
+                .iter()
+                .all(|s| s.status == cordial_core::session::PlanStatus::Done),
+        "worksheet checklist incomplete"
+    );
+    assert!(
+        calls.iter().any(|name| name.contains("python")),
+        "Python was not executed"
+    );
+    assert!(
+        !leftover_scripts,
+        "a temporary Python script was left behind"
+    );
 }
 
 /// Optional exact-file evaluation. The PDF is supplied by the test operator,
