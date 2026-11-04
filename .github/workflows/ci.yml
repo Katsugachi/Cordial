@@ -183,6 +183,7 @@ jobs:
             CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
             npm --prefix ui test -- --run tests/pdf.test.ts
       - name: Evaluate supplied worksheet with the real model
+        timeout-minutes: 40
         if: contains(github.event.head_commit.message, '[pdf-test]')
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models

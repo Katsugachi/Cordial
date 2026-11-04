@@ -300,7 +300,9 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
 
   async function switchSession(id: string): Promise<void> {
     try {
-      state.session = await bridge.loadSession(id);
+      const session = await bridge.loadSession(id);
+      if (state.session?.id !== session.id) attachments = [];
+      state.session = session;
       state.turn = null;
       state.approval = null;
       state.notice = null;
@@ -457,6 +459,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
           await refreshSessions();
           if (state.session?.id === id) {
             state.session = state.sessions[0] ? await bridge.loadSession(state.sessions[0].id) : await bridge.createSession();
+            attachments = [];
           }
           render();
         })();

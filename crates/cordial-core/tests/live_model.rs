@@ -29,6 +29,8 @@ struct Live {
     backend: Backend,
     runtime: ToolRuntime,
     workspace: PathBuf,
+    max_tool_rounds_override: Option<u32>,
+    last_diagnostics: Vec<String>,
     // Kept alive for the whole test so the workspace and scratch folders are
     // not deleted while the agent is still using them.
     _workspace_dir: tempdir::TempDir,
@@ -157,6 +159,8 @@ impl Live {
             backend: Backend::Llama(backend),
             runtime,
             workspace: workspace.path().to_path_buf(),
+            max_tool_rounds_override: None,
+            last_diagnostics: Vec::new(),
             _workspace_dir: workspace,
             _scratch: scratch,
         })
@@ -194,7 +198,10 @@ impl Live {
                     }
                     cordial_core::AgentEvent::ToolCallFinished {
                         name, summary, ok, ..
-                    } => diagnostics.push(format!("tool {name} ok={ok}: {summary}")),
+                    } => {
+                        eprintln!("EVAL progress tool {name} ok={ok}: {summary}");
+                        diagnostics.push(format!("tool {name} ok={ok}: {summary}"));
+                    }
                     _ => {}
                 }
             }
@@ -209,7 +216,7 @@ impl Live {
             skill: String::new(),
             thinking: effort != Effort::Low,
             max_output_tokens: 1_536,
-            max_tool_rounds: effort.max_tool_rounds(),
+            max_tool_rounds: self.max_tool_rounds_override.unwrap_or_else(|| effort.max_tool_rounds()),
             max_tool_result_chars: 6_000,
             keep_image_turns: 2,
             sampling: SamplingParams {
@@ -234,6 +241,7 @@ impl Live {
         for line in &diagnostics {
             eprintln!("  · {line}");
         }
+        self.last_diagnostics = diagnostics;
         let stop = result
             .map(|r| format!("{:?}", r.stop))
             .unwrap_or_else(|e| format!("error: {e}"));
@@ -480,6 +488,9 @@ async fn rendered_pdf_worksheet_end_to_end() {
     let Some(mut live) = Live::boot().await else {
         panic!("model unavailable")
     };
+    // A bounded evaluation should produce diagnostics even if the model loops.
+    // Production Task mode retains its larger independent round budget.
+    live.max_tool_rounds_override = Some(12);
     let (session, answer) = live.turn(Effort::Task, false,
         "Complete the attached worksheet. Show reasoning for each answer. Use Python for calculations and clean up any temporary scripts.",
         vec![Attachment { kind: AttachmentKind::Image, name: "worksheet.pdf, page 1 (image)".into(), path: image },
@@ -490,15 +501,27 @@ async fn rendered_pdf_worksheet_end_to_end() {
         .flat_map(|m| &m.tool_calls)
         .map(|c| c.name.as_str())
         .collect();
-    let leftover_scripts = std::fs::read_dir(&live.workspace)
-        .unwrap()
-        .flatten()
-        .any(|entry| entry.path().extension().and_then(|v| v.to_str()) == Some("py"));
+    fn contains_script(dir: &Path) -> std::io::Result<bool> {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() && contains_script(&entry.path())? {
+                return Ok(true);
+            }
+            if kind.is_file() && entry.path().extension().and_then(|v| v.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("py")) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    let leftover_scripts = contains_script(&live.workspace).unwrap() || contains_script(live._scratch.path()).unwrap();
     eprintln!("EVAL rendered worksheet answer={answer:?}, plan={:?}, tools={calls:?}, leftover_scripts={leftover_scripts}", session.plan);
-    assert!(
-        answer.contains("75.40") && answer.contains("47.17") && answer.contains("98.534"),
-        "worksheet answers did not match independent calculations"
-    );
+    let numbers: Vec<f64> = regex::Regex::new(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+        .unwrap().find_iter(&answer).filter_map(|m| m.as_str().parse().ok()).collect();
+    for expected in [75.39822368615503, 47.16990566028302, 98.53444594169618] {
+        assert!(numbers.iter().any(|actual| (actual - expected).abs() < 0.005),
+            "worksheet answer {expected} was missing or incorrect: {numbers:?}");
+    }
     assert!(
         !session.plan.is_empty()
             && session
@@ -508,8 +531,11 @@ async fn rendered_pdf_worksheet_end_to_end() {
         "worksheet checklist incomplete"
     );
     assert!(
-        calls.iter().any(|name| name.contains("python")),
-        "Python was not executed"
+        calls.iter().filter(|name| name.contains("python")).any(|name| {
+            let prefix = format!("tool {name} ok=true:");
+            live.last_diagnostics.iter().any(|line| line.starts_with(&prefix))
+        }),
+        "Python was not successfully executed"
     );
     assert!(
         !leftover_scripts,
