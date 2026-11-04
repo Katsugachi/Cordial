@@ -237,7 +237,10 @@ impl<'a> Agent<'a> {
                     };
                     if stop == StopReason::ContextFull && self.config.effort == Effort::Task {
                         let message = Message::assistant("Task incomplete: the conversation exceeded the model's context before the work was finished. Review the checklist and start a follow-up with the remaining steps.", None, vec![]);
-                        self.events.emit(AgentEvent::AssistantMessage { turn_id: turn_id.clone(), message: message.clone() });
+                        self.events.emit(AgentEvent::AssistantMessage {
+                            turn_id: turn_id.clone(),
+                            message: message.clone(),
+                        });
                         session.push(message);
                         self.checkpoint(session);
                     }
@@ -382,13 +385,24 @@ impl<'a> Agent<'a> {
                 let ok = self.execute_call(session, &turn_id, call).await;
                 if self.config.effort == Effort::Task && call.name == "web_fetch" {
                     let url = call.arg("url").unwrap_or("").trim().to_string();
-                    let result = session.messages.last().map(|m| m.content.clone()).unwrap_or_default();
+                    let result = session
+                        .messages
+                        .last()
+                        .map(|m| m.content.clone())
+                        .unwrap_or_default();
                     let count = repeated_fetches.entry((url, result)).or_default();
                     *count += 1;
                     if *count >= 3 {
-                        let reason = if ok { "returned the same result" } else { "failed" };
+                        let reason = if ok {
+                            "returned the same result"
+                        } else {
+                            "failed"
+                        };
                         let message = Message::assistant(format!("Task incomplete: repeated attempts to fetch the same source {reason}. Review the source or supply another one before continuing."), None, vec![]);
-                        self.events.emit(AgentEvent::AssistantMessage { turn_id: turn_id.clone(), message: message.clone() });
+                        self.events.emit(AgentEvent::AssistantMessage {
+                            turn_id: turn_id.clone(),
+                            message: message.clone(),
+                        });
                         session.push(message);
                         self.checkpoint(session);
                         break 'turn StopReason::Failed;
@@ -489,7 +503,12 @@ impl<'a> Agent<'a> {
         Message::user(content, kept)
     }
 
-    async fn execute_call(&mut self, session: &mut Session, turn_id: &str, call: &ToolCall) -> bool {
+    async fn execute_call(
+        &mut self,
+        session: &mut Session,
+        turn_id: &str,
+        call: &ToolCall,
+    ) -> bool {
         let risk_label = tools::spec_for(&call.name)
             .map(|spec| spec.risk.label().to_string())
             .unwrap_or_else(|| "changes files".to_string());

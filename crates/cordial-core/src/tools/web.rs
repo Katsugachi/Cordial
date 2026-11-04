@@ -22,18 +22,29 @@ const MAX_WEB_BODY_BYTES: usize = 2_000_000;
 
 fn append_bounded(buffer: &mut Vec<u8>, chunk: &[u8]) -> Result<(), CoreError> {
     if chunk.len() > MAX_WEB_BODY_BYTES.saturating_sub(buffer.len()) {
-        return Err(CoreError::Network("response exceeds the web body limit".to_string()));
+        return Err(CoreError::Network(
+            "response exceeds the web body limit".to_string(),
+        ));
     }
     buffer.extend_from_slice(chunk);
     Ok(())
 }
 
 async fn read_bounded(mut response: reqwest::Response) -> Result<String, CoreError> {
-    if response.content_length().is_some_and(|length| length > MAX_WEB_BODY_BYTES as u64) {
-        return Err(CoreError::Network("response exceeds the web body limit".to_string()));
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_WEB_BODY_BYTES as u64)
+    {
+        return Err(CoreError::Network(
+            "response exceeds the web body limit".to_string(),
+        ));
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|err| CoreError::Network(err.to_string()))? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|err| CoreError::Network(err.to_string()))?
+    {
         append_bounded(&mut bytes, &chunk)?;
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
@@ -384,7 +395,11 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             let _ = stream.read(&mut [0; 2048]);
-            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", MAX_WEB_BODY_BYTES + 1);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                MAX_WEB_BODY_BYTES + 1
+            );
         });
         let response = reqwest::get(format!("http://{address}/")).await.unwrap();
         assert!(read_bounded(response).await.is_err());
