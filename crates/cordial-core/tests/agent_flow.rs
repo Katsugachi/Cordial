@@ -672,3 +672,36 @@ async fn blocked_steps_are_not_reported_as_task_completion() {
         cordial_core::session::PlanStatus::Blocked
     );
 }
+
+#[tokio::test]
+async fn task_stops_after_repeated_failed_fetches() {
+    let fixture = Fixture::new("failed-fetch-loop");
+    let mut session = Session::new();
+    let plan = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Research\",\"status\":\"running\"}]</parameter></function></tool_call>";
+    let fetch = "<tool_call><function=web_fetch><parameter=url>file://invalid</parameter></function></tool_call>";
+    let mut cfg = config(Effort::Task, PermissionMode::Auto);
+    cfg.web_enabled = true;
+    let (result, events) = run_turn(&fixture, vec![plan, fetch, fetch, fetch, fetch], cfg, &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Failed);
+    assert!(session.messages.last().unwrap().content.contains("repeated attempts"));
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")).count(), 3);
+}
+
+#[tokio::test]
+async fn task_context_exhaustion_gives_explicit_incomplete_message() {
+    let fixture = Fixture::new("task-overflow");
+    let mut session = Session::new();
+    let runtime = fixture.runtime(Effort::Task);
+    let mut scripted = ScriptedBackend::new(Vec::<String>::new());
+    scripted.fail_once(ScriptFailure::Overflow);
+    let mut backend = Backend::Scripted(scripted);
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
+        events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
+    let result = agent.run(&mut session, "Research this".into(), vec![]).await.unwrap();
+    assert_eq!(result.stop, StopReason::ContextFull);
+    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
+    assert!(session.messages.last().unwrap().content.contains("context"));
+}

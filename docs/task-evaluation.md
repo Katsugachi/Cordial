@@ -31,4 +31,6 @@ subjects or research tasks. A separate `research_worksheets_architecture_and_eng
 live smoke test exercises web search, opening and citing a source, a generated
 geometry calculation, and literary analysis. It is triggered with `[research]`
 and independently checks selected answers; it is not a comprehensive held-out
-benchmark.
+benchmark. In [run 41795514600](https://github.com/Katsugachi/Cordial/actions/runs/41795514600)
+the model produced no final answer for either worksheet. The English attempt
+repeated web fetches until its context filled. These tests failed.

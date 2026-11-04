@@ -16,6 +16,29 @@ use crate::tools::htmltext::html_to_text;
 use crate::tools::{ToolOutcome, ToolRuntime};
 use crate::util::truncate_chars;
 
+// Bound decoded HTTP bodies before parsing, including responses with no or a
+// misleading Content-Length. This is not a network isolation mechanism.
+const MAX_WEB_BODY_BYTES: usize = 2_000_000;
+
+fn append_bounded(buffer: &mut Vec<u8>, chunk: &[u8]) -> Result<(), CoreError> {
+    if chunk.len() > MAX_WEB_BODY_BYTES.saturating_sub(buffer.len()) {
+        return Err(CoreError::Network("response exceeds the web body limit".to_string()));
+    }
+    buffer.extend_from_slice(chunk);
+    Ok(())
+}
+
+async fn read_bounded(mut response: reqwest::Response) -> Result<String, CoreError> {
+    if response.content_length().is_some_and(|length| length > MAX_WEB_BODY_BYTES as u64) {
+        return Err(CoreError::Network("response exceeds the web body limit".to_string()));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|err| CoreError::Network(err.to_string()))? {
+        append_bounded(&mut bytes, &chunk)?;
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// One search result.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SearchHit {
@@ -78,7 +101,7 @@ async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<Vec<SearchHit>
 
     if let Ok(response) = primary {
         if response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body = read_bounded(response).await.unwrap_or_default();
             let hits = parse_html_results(&body);
             if !hits.is_empty() {
                 return Ok(hits);
@@ -102,7 +125,7 @@ async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<Vec<SearchHit>
             response.status()
         )));
     }
-    let body = response.text().await.unwrap_or_default();
+    let body = read_bounded(response).await?;
     let hits = parse_lite_results(&body);
     if hits.is_empty() {
         return Err(CoreError::Network(
@@ -285,7 +308,7 @@ pub async fn fetch(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
         );
     }
 
-    let body = match response.text().await {
+    let body = match read_bounded(response).await {
         Ok(body) => body,
         Err(err) => return ToolOutcome::fail("read failed", format!("Error: {err}")),
     };
@@ -342,6 +365,31 @@ fn short_host(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_limit_is_enforced_across_chunks() {
+        let mut bytes = vec![b'x'; MAX_WEB_BODY_BYTES - 2];
+        append_bounded(&mut bytes, b"ab").unwrap();
+        assert_eq!(bytes.len(), MAX_WEB_BODY_BYTES);
+        assert!(append_bounded(&mut bytes, b"c").is_err());
+        assert_eq!(bytes.len(), MAX_WEB_BODY_BYTES);
+        assert!(append_bounded(&mut Vec::new(), &vec![0; MAX_WEB_BODY_BYTES + 1]).is_err());
+    }
+
+    #[tokio::test]
+    async fn oversized_http_response_is_rejected_without_reading_body() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _ = stream.read(&mut [0; 2048]);
+            let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", MAX_WEB_BODY_BYTES + 1);
+        });
+        let response = reqwest::get(format!("http://{address}/")).await.unwrap();
+        assert!(read_bounded(response).await.is_err());
+        server.join().unwrap();
+    }
 
     #[test]
     fn duckduckgo_redirects_are_unwrapped() {

@@ -29,9 +29,11 @@ for writes, and remembers a grant for the rest of the session.
   them. Use a trusted workspace and do not treat this as isolation from a
   malicious local user. Reads are capped at 1.5 MB and
   rejected when the first 8 KB look binary.
-- **Network.** Only `http` and `https` URLs are fetched. Redirects are limited to
-  8 hops. There is no request to `file://`, `localhost` via the tools, or any
-  protocol handler the app did not implement.
+- **Network.** Direct tool URLs must use `http` or `https`, and HTTP redirects
+  are limited to 8 hops. This is not network isolation: URLs, redirects, DNS,
+  and browser page requests can reach localhost or private networks. Do not use
+  web or browser tools with untrusted content where internal services are
+  sensitive. Browser pages can make additional requests and follow redirects.
 - **Browser.** The browser runs headless with its own throwaway profile in the
   app-data scratch folder, `--mute-audio --no-first-run`, and is killed when the
   session ends. It is the user's own browser binary: Cordial does not ship one.
@@ -50,7 +52,8 @@ limits the blast radius instead:
 
 1. Tool results are labelled (`<tool_response>`) and untrusted by construction.
 2. Anything that writes needs explicit approval, in both permission modes.
-3. The workspace is a sandbox folder, not the home directory.
+3. File tools are restricted to the chosen workspace, subject to the filesystem
+   race limitation above. Users can select a broader folder, including their home.
 4. The system prompt tells the model that page content is data, not instructions.
 
 A reviewer should treat "the model reads a hostile page and asks to write a file"
