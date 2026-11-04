@@ -152,7 +152,9 @@ pub fn read_text_bounded(path: &Path, max_chars: usize) -> Result<String, CoreEr
     }
     let bytes = std::fs::read(path)?;
     if bytes.starts_with(b"%PDF-") {
-        return Err(CoreError::Other("PDF documents cannot be read as text; diagrams and layout would be lost".to_string()));
+        return Err(CoreError::Other(
+            "PDF documents cannot be read as text; diagrams and layout would be lost".to_string(),
+        ));
     }
     if bytes.iter().take(8192).any(|b| *b == 0) {
         return Err(CoreError::Other(
