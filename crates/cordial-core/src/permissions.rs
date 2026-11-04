@@ -125,8 +125,16 @@ mod tests {
     #[cfg(feature = "sandbox-python")]
     #[test]
     fn isolated_python_follows_the_permission_mode() {
-        assert_eq!(PermissionPolicy::new(PermissionMode::Auto).evaluate(&call("python_calculate")), Permission::Allow);
-        assert_eq!(PermissionPolicy::new(PermissionMode::Manual).evaluate(&call("python_calculate")), Permission::Ask { risk: Risk::Compute });
+        assert_eq!(
+            PermissionPolicy::new(PermissionMode::Auto).evaluate(&call("python_calculate")),
+            Permission::Allow
+        );
+        assert_eq!(
+            PermissionPolicy::new(PermissionMode::Manual).evaluate(&call("python_calculate")),
+            Permission::Ask {
+                risk: Risk::Compute
+            }
+        );
     }
 
     #[test]

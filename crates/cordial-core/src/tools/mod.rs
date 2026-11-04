@@ -360,7 +360,11 @@ impl ToolRuntime {
     ) -> Self {
         let instance = std::sync::OnceLock::new();
         let _ = instance.set(Ok(sandbox));
-        self.python = Some(Arc::new(PythonRuntime { path: None, sandbox: instance, gate: std::sync::Mutex::new(()) }));
+        self.python = Some(Arc::new(PythonRuntime {
+            path: None,
+            sandbox: instance,
+            gate: std::sync::Mutex::new(()),
+        }));
         self
     }
 
@@ -368,7 +372,11 @@ impl ToolRuntime {
     #[cfg(feature = "sandbox-python")]
     pub fn with_python_path(mut self, path: PathBuf) -> Self {
         if path.is_file() {
-            self.python = Some(Arc::new(PythonRuntime { path: Some(path), sandbox: std::sync::OnceLock::new(), gate: std::sync::Mutex::new(()) }));
+            self.python = Some(Arc::new(PythonRuntime {
+                path: Some(path),
+                sandbox: std::sync::OnceLock::new(),
+                gate: std::sync::Mutex::new(()),
+            }));
         }
         self
     }
@@ -421,8 +429,14 @@ impl ToolRuntime {
                 let Some(code) = call.arg("code") else {
                     return ToolOutcome::fail("missing code", "Error: `code` is required.");
                 };
-                if code.is_empty() || code.len() > crate::python_sandbox::MAX_SCRIPT_BYTES || code.contains('\0') {
-                    return ToolOutcome::fail("invalid Python code", "Error: Python code must be 1-8192 bytes without NULs.");
+                if code.is_empty()
+                    || code.len() > crate::python_sandbox::MAX_SCRIPT_BYTES
+                    || code.contains('\0')
+                {
+                    return ToolOutcome::fail(
+                        "invalid Python code",
+                        "Error: Python code must be 1-8192 bytes without NULs.",
+                    );
                 }
                 let code = code.to_owned();
                 match tokio::task::spawn_blocking(move || python.run(&code)).await {

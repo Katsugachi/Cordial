@@ -171,8 +171,16 @@ mod tests {
             sandbox.run("import os; os.system('echo unsafe')").is_err(),
             "process creation was allowed"
         );
-        assert!(sandbox.run("import subprocess; subprocess.run(['sh', '-c', 'echo unsafe'])").is_err(), "subprocess was allowed");
-        assert!(sandbox.run("import ctypes; ctypes.CDLL(None)").is_err(), "native library access was allowed");
+        assert!(
+            sandbox
+                .run("import subprocess; subprocess.run(['sh', '-c', 'echo unsafe'])")
+                .is_err(),
+            "subprocess was allowed"
+        );
+        assert!(
+            sandbox.run("import ctypes; ctypes.CDLL(None)").is_err(),
+            "native library access was allowed"
+        );
         sandbox.run("x = 123").expect("first isolated run");
         assert!(
             sandbox.run("print(x)").is_err(),
@@ -218,8 +226,13 @@ mod tests {
             }],
         };
         let executor = tokio::runtime::Runtime::new().unwrap();
-        let tampered = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
-            .unwrap().with_python_path(bad.clone());
+        let tampered = crate::tools::ToolRuntime::new(
+            root.clone(),
+            root.join("scratch"),
+            crate::settings::Effort::Task,
+        )
+        .unwrap()
+        .with_python_path(bad.clone());
         assert!(tampered.has_python_sandbox());
         let denied = executor.block_on(tampered.execute(&call));
         assert!(!denied.ok && denied.text.contains("integrity check failed"));
@@ -227,8 +240,13 @@ mod tests {
         let outcome = executor.block_on(runtime.execute(&call));
         assert!(outcome.ok, "{}", outcome.text);
         assert!(outcome.text.contains("42"));
-        let lazy = crate::tools::ToolRuntime::new(root.clone(), root.join("scratch"), crate::settings::Effort::Task)
-            .unwrap().with_python_path(path.into());
+        let lazy = crate::tools::ToolRuntime::new(
+            root.clone(),
+            root.join("scratch"),
+            crate::settings::Effort::Task,
+        )
+        .unwrap()
+        .with_python_path(path.into());
         for _ in 0..2 {
             let result = executor.block_on(lazy.execute(&call));
             assert!(result.ok && result.text.contains("42"), "{}", result.text);
@@ -243,18 +261,37 @@ mod tests {
         let mut settings = crate::settings::Settings::default();
         settings.effort = crate::settings::Effort::Task;
         settings.web_enabled = false;
-        let mut policy = crate::permissions::PermissionPolicy::new(crate::settings::PermissionMode::Auto);
+        let mut policy =
+            crate::permissions::PermissionPolicy::new(crate::settings::PermissionMode::Auto);
         let gate = crate::ApprovalGate::new();
         let (events, _receiver) = crate::events::EventSink::channel();
         let mut agent = crate::Agent {
-            backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
-            events: &events, config: crate::AgentConfig::from_settings(&settings), store: None,
+            backend: &mut backend,
+            tools: &runtime,
+            policy: &mut policy,
+            approvals: &gate,
+            events: &events,
+            config: crate::AgentConfig::from_settings(&settings),
+            store: None,
         };
         let mut session = crate::session::Session::new();
-        let result = executor.block_on(agent.run(&mut session, "Calculate 6 times 7 with Python".into(), vec![])).unwrap();
+        let result = executor
+            .block_on(agent.run(
+                &mut session,
+                "Calculate 6 times 7 with Python".into(),
+                vec![],
+            ))
+            .unwrap();
         assert_eq!(result.stop, crate::events::StopReason::Answered);
-        assert!(session.plan.iter().all(|step| step.status == crate::session::PlanStatus::Done));
-        assert!(session.messages.iter().any(|message| message.role == crate::session::Role::Tool && message.content.contains("Python output:\n42")));
+        assert!(session
+            .plan
+            .iter()
+            .all(|step| step.status == crate::session::PlanStatus::Done));
+        assert!(session
+            .messages
+            .iter()
+            .any(|message| message.role == crate::session::Role::Tool
+                && message.content.contains("Python output:\n42")));
         assert_eq!(
             std::fs::read_dir(&root).unwrap().count(),
             0,
