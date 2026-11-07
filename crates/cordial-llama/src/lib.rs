@@ -489,7 +489,9 @@ impl Context {
         reserve_tokens: u32,
     ) -> Result<i32, LlamaError> {
         if n_past != 0 {
-            return Err(LlamaError::Context("multimodal evaluation requires a zero past position".to_string()));
+            return Err(LlamaError::Context(
+                "multimodal evaluation requires a zero past position".to_string(),
+            ));
         }
         let c_prompt = CString::new(prompt)?;
         let c_media: Vec<CString> = media

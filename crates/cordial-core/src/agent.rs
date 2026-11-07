@@ -478,7 +478,8 @@ impl<'a> Agent<'a> {
                         suppress_fetch_next = true;
                         retry_instruction = "The same source has already returned the same result twice. Do not fetch it again. Use the information already obtained, work on the remaining questions, or choose a different source if needed.";
                         self.events.emit(AgentEvent::Notice {
-                            message: "Avoiding a repeated source fetch; continuing the task.".to_string(),
+                            message: "Avoiding a repeated source fetch; continuing the task."
+                                .to_string(),
                         });
                     }
                     if *count >= 3 {

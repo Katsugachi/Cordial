@@ -379,7 +379,9 @@ fn run_generation_inner(
             .context
             .eval_multimodal(mtmd, &prompt, &request.media, 0, request.max_tokens)
             .map_err(|err| match err {
-                LlamaError::ContextLimit { used, available } => CoreError::ContextOverflow { used, available },
+                LlamaError::ContextLimit { used, available } => {
+                    CoreError::ContextOverflow { used, available }
+                }
                 other => CoreError::Inference(other.to_string()),
             })?;
         // Positions are distinct from KV cells for M-RoPE; both must leave

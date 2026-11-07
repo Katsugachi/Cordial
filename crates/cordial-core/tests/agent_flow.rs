@@ -968,8 +968,18 @@ async fn repeated_fetch_nudges_task_to_work_before_aborting() {
     let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"done\"}]</parameter></function></tool_call>";
     let mut cfg = config(Effort::Task, PermissionMode::Auto);
     cfg.web_enabled = true;
-    let (result, events) = run_turn(&fixture, vec![plan, fetch, fetch, read, done, "The notes say Friday."], cfg, &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![plan, fetch, fetch, read, done, "The notes say Friday."],
+        cfg,
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message.contains("Avoiding a repeated source fetch"))));
-    assert!(session.messages.iter().any(|m| m.role == Role::Tool && m.content.contains("ship on Friday")));
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.role == Role::Tool && m.content.contains("ship on Friday")));
 }
