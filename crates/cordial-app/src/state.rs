@@ -18,6 +18,8 @@ use cordial_core::tools::ToolRuntime;
 use cordial_core::{Agent, AgentConfig, ApprovalGate, CoreError, Paths};
 use cordial_llama::SamplingParams;
 use tauri::{AppHandle, Emitter};
+#[cfg(feature = "experimental-python")]
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 /// Event name the frontend listens on.
@@ -58,10 +60,20 @@ pub struct Core {
     pub policy: PermissionPolicy,
     pub engine: Option<Engine>,
     pub model_load_error: Option<String>,
+    python_path: Option<PathBuf>,
+}
+
+fn create_tools(workspace: PathBuf, scratch: PathBuf, effort: cordial_core::settings::Effort, python_path: Option<&Path>) -> Result<ToolRuntime, CoreError> {
+    let tools = ToolRuntime::new(workspace, scratch, effort)?;
+    #[cfg(feature = "experimental-python")]
+    let tools = if let Some(path) = python_path { tools.with_python_path(path.to_path_buf()) } else { tools };
+    #[cfg(not(feature = "experimental-python"))]
+    let _ = python_path;
+    Ok(tools)
 }
 
 impl Core {
-    fn load() -> Result<Self, CoreError> {
+    fn load(python_path: Option<PathBuf>) -> Result<Self, CoreError> {
         let paths = match Paths::discover() {
             Ok(paths) => paths,
             Err(_) => Paths::at(std::env::temp_dir().join("Cordial")),
@@ -72,8 +84,7 @@ impl Core {
         let store = SessionStore::new(paths.sessions_dir());
         let workspace = workspace_for(&paths, &settings);
         std::fs::create_dir_all(&workspace)?;
-        let tools = ToolRuntime::new(workspace, paths.root().join("scratch"), settings.effort)
-            .map_err(|err| CoreError::Other(err.to_string()))?;
+        let tools = create_tools(workspace, paths.root().join("scratch"), settings.effort, python_path.as_deref())?;
 
         Ok(Self {
             policy: PermissionPolicy::new(settings.permission_mode),
@@ -82,6 +93,7 @@ impl Core {
             tools: Arc::new(tools),
             engine: None,
             model_load_error: None,
+            python_path,
             paths,
         })
     }
@@ -169,6 +181,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(app: AppHandle) -> Result<Self, String> {
+        #[cfg(feature = "experimental-python")]
+        let python_path = app.path().resolve("python/python.wasm", tauri::path::BaseDirectory::Resource).ok()
+            .filter(|path| path.is_file())
+            .or_else(|| {
+                if cfg!(debug_assertions) {
+                    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ui/node_modules/@antonz/python-wasi/dist/python.wasm");
+                    path.is_file().then_some(path)
+                } else {
+                    None
+                }
+            });
+        #[cfg(not(feature = "experimental-python"))]
+        let python_path = None;
         let (events, mut receiver) = EventSink::channel();
         tauri::async_runtime::spawn(async move {
             while let Some(event) = receiver.recv().await {
@@ -176,7 +201,7 @@ impl AppState {
             }
         });
 
-        let core = Core::load().map_err(|err| err.to_string())?;
+        let core = Core::load(python_path).map_err(|err| err.to_string())?;
         let models = ModelManager::new(core.paths.models_dir()).map_err(|err| err.to_string())?;
         Ok(Self {
             core: Arc::new(Mutex::new(core)),
@@ -337,10 +362,11 @@ impl AppState {
             let workspace = workspace_for(&guard.paths, &settings);
             std::fs::create_dir_all(&workspace).map_err(|err| err.to_string())?;
             guard.tools = Arc::new(
-                ToolRuntime::new(
+                create_tools(
                     workspace,
                     guard.paths.root().join("scratch"),
                     settings.effort,
+                    guard.python_path.as_deref(),
                 )
                 .map_err(|err| err.to_string())?,
             );
@@ -493,6 +519,21 @@ pub fn write_settings(paths: &Paths, settings: &Settings) -> Result<(), CoreErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "experimental-python")]
+    #[test]
+    fn optional_python_runtime_is_retained_when_tools_are_recreated() {
+        let root = std::env::temp_dir().join(format!("cordial-app-python-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let module = root.join("python.wasm");
+        std::fs::write(&module, b"untrusted; the sandbox will verify before use").unwrap();
+        let first = create_tools(root.clone(), root.join("scratch"), cordial_core::settings::Effort::Task, Some(&module)).unwrap();
+        let updated = create_tools(root.clone(), root.join("scratch"), cordial_core::settings::Effort::High, Some(&module)).unwrap();
+        let missing = create_tools(root.clone(), root.join("scratch"), cordial_core::settings::Effort::Task, None).unwrap();
+        assert!(first.has_python_sandbox() && updated.has_python_sandbox());
+        assert!(!missing.has_python_sandbox());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn turn_guard_admits_one_owner_and_releases_on_drop() {

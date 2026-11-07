@@ -263,6 +263,8 @@ impl Live {
             .map(|r| format!("{:?}", r.stop))
             .unwrap_or_else(|e| format!("error: {e}"));
 
+        eprintln!("EVAL progress turn stop={stop}; diagnostics={:?}", self.last_diagnostics);
+
         let answer = session
             .messages
             .iter()
@@ -416,9 +418,9 @@ async fn research_worksheets_architecture_and_english() {
     // Keep this a finite evaluation even if the model gets stuck; normal Task
     // mode retains its larger budget.
     live.max_tool_rounds_override = Some(20);
-    let seed = cordial_core::util::now_ms() % 5;
-    let width = 12 + seed;
-    let length = 19 + seed;
+    let seed = uuid::Uuid::new_v4().as_u128();
+    let width = 10 + seed % 11;
+    let length = 18 + (seed / 11) % 13;
     let area = length * width;
     let packs = (area * 11 + 24) / 25; // ceiling(area * 1.10 / 2.5)
     let cost = packs * 48;

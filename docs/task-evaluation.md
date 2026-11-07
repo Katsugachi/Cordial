@@ -36,8 +36,12 @@ and did not use Python. In [run 41914447409](https://github.com/Katsugachi/Cordi
 the model identified the diagram dimensions and executed Python in the isolated
 runtime, but its final answers were wrong: it double-counted the cone base,
 reversed the rod-fit conclusion, and gave the wrong cube volume. Its checklist
-also remained unfinished. The isolated runtime passed its Linux security tests,
-but it is not enabled in the desktop app. PDF diagrams require visual rendering,
+also remained unfinished. In [run 41919253067](https://github.com/Katsugachi/Cordial/actions/runs/41919253067),
+the model again used Python, but used an incorrect cone formula and treated the
+cube's body diagonal as an edge; it correctly stated that the rod fits despite
+having run a reversed Python inequality. The checklist remained incomplete.
+The isolated runtime passed its Linux security tests,
+but it is not enabled in default desktop builds. PDF diagrams require visual rendering,
 not text extraction alone.
 The fixture was removed from the current branch after the test, but remains in
 Git history, with the user's consent. This failed test does not validate other
@@ -50,4 +54,7 @@ the model produced no final answer for either worksheet. The English attempt
 repeated web fetches until its context filled. In the later [run 41798196782](https://github.com/Katsugachi/Cordial/actions/runs/41798196782),
 the architecture answer contained the checked facts and arithmetic but no
 source URL or checklist; the English task stopped after repeated HTTP 403s.
-Both runs failed the end-to-end research tests.
+Both runs failed the end-to-end research tests. In [run 41919253067](https://github.com/Katsugachi/Cordial/actions/runs/41919253067),
+the expanded architecture task ended with an incomplete answer and no checklist;
+the English task opened sources but returned no final answer with its checklist
+unfinished. These results remain failures even though some tools succeeded.

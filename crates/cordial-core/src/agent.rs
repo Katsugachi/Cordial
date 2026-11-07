@@ -196,6 +196,7 @@ impl<'a> Agent<'a> {
         let mut reconcile_next = false;
         let mut suppress_plan_next = false;
         let mut unchanged_plan_updates = 0u32;
+        let mut empty_task_retries = 0u32;
         let mut repeated_fetches: HashMap<(String, String), u32> = HashMap::new();
 
         let outcome = 'turn: loop {
@@ -332,6 +333,18 @@ impl<'a> Agent<'a> {
                         thinking = false;
                         self.events.emit(AgentEvent::Notice {
                             message: "Retrying without reasoning.".to_string(),
+                        });
+                        continue;
+                    }
+                    if self.config.effort == Effort::Task && empty_task_retries < 2 {
+                        empty_task_retries += 1;
+                        thinking = false;
+                        retry_instruction = "Your previous response was empty. Continue the task using the available evidence and tools, or explain what is blocked. Do not silently stop.";
+                        self.events.emit(AgentEvent::GenerationReset {
+                            turn_id: turn_id.clone(),
+                        });
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Retrying an empty task response.".to_string(),
                         });
                         continue;
                     }

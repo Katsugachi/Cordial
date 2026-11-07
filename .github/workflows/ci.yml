@@ -110,6 +110,10 @@ jobs:
         run: npm --prefix ui ci && npm --prefix ui run build
       - name: Test the desktop shell
         run: scripts/ci/report.sh cargo test -p cordial-app
+      - name: Test the opt-in Python bundle resources
+        run: python3 scripts/ci/test_python_packaging.py
+      - name: Test the opt-in Python desktop integration
+        run: CARGO_BUILD_JOBS=2 scripts/ci/report.sh cargo test -p cordial-app --features experimental-python
 
   ui:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

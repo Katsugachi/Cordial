@@ -49,8 +49,8 @@ for writes, and remembers a grant for the rest of the session.
 
 ## Experimental Python sandbox
 
-An opt-in WASI Python prototype is available to the live test harness, but is
-**not enabled in the desktop app**.
+An opt-in WASI Python prototype is available to the live test harness and via
+an experimental desktop build feature, but is **not enabled in default builds**.
 It uses a pinned CPython module, no preopened host directories, no inherited
 host environment or standard input, bounded output, memory and instruction
 fuel. The module is integrity-checked and scripts are passed in memory rather

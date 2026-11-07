@@ -8,6 +8,16 @@ SCRIPT = Path(__file__).with_name("task_eval_diagnostics.py")
 
 
 class DiagnosticsTest(unittest.TestCase):
+    def test_python_calls_do_not_hide_the_final_answer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "test.log"
+            log.write_text("EVAL rendered worksheet answer=wrong\n" +
+                           "".join(f"EVAL python code={i}, result=ok\n" for i in range(8)))
+            output = subprocess.check_output(["python3", str(SCRIPT), str(log)], text=True)
+            self.assertIn("EVAL rendered worksheet answer=wrong", output)
+            self.assertIn("EVAL python code=7", output)
+            self.assertLessEqual(len(output.splitlines()), 9)
+
     def test_many_progress_events_do_not_hide_final_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "test.log"

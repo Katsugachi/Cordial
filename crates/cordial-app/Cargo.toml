@@ -7,6 +7,10 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Cordial desktop app: a local, private agent powered by LFM3-VL-2B."
 
+[features]
+# Explicit opt-in while the desktop packaging and non-Linux hosts are evaluated.
+experimental-python = ["cordial-core/sandbox-python"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

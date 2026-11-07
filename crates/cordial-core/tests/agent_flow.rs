@@ -812,3 +812,30 @@ async fn repeated_unchanged_checklist_prompts_work_instead_of_looping() {
         .any(|message| message.role == Role::Tool && message.content.contains("ship on Friday")));
     assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message.contains("checklist has not changed"))));
 }
+
+#[tokio::test]
+async fn empty_task_responses_are_retried_but_bounded() {
+    let fixture = Fixture::new("empty-task");
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Answer\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let mut session = Session::new();
+    let (result, events) = run_turn(
+        &fixture,
+        vec![done, "", "Final answer."],
+        config(Effort::Task, PermissionMode::Auto),
+        &mut session,
+        None,
+    ).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Retrying an empty task response"))));
+    assert!(session.messages.iter().any(|m| m.role == Role::Assistant && m.content == "Final answer."));
+
+    let mut session = Session::new();
+    let (result, _) = run_turn(
+        &fixture,
+        vec![done, "", "", ""],
+        config(Effort::Task, PermissionMode::Auto),
+        &mut session,
+        None,
+    ).await;
+    assert_eq!(result.stop, StopReason::EmptyAnswer);
+}
