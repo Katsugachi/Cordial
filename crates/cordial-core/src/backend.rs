@@ -425,7 +425,13 @@ fn run_generation_inner(
             state
                 .context
                 .decode(&tokens[start..], start as i32)
-                .map_err(|err| decode_error(err, tokens.len(), n_ctx.saturating_sub(request.max_tokens as usize)))?;
+                .map_err(|err| {
+                    decode_error(
+                        err,
+                        tokens.len(),
+                        n_ctx.saturating_sub(request.max_tokens as usize),
+                    )
+                })?;
         }
         state.cache_exact = true;
         state.cached_tokens = tokens.clone();
@@ -717,9 +723,21 @@ mod tests {
 
     #[test]
     fn only_kv_slot_exhaustion_is_classified_as_context_overflow() {
-        assert!(matches!(decode_error(LlamaError::Decode(1), 100, 99), CoreError::ContextOverflow { used: 100, available: 99 }));
-        assert!(matches!(decode_error(LlamaError::Decode(-1), 100, 99), CoreError::Inference(_)));
-        assert!(matches!(decode_error(LlamaError::Sample, 100, 99), CoreError::Inference(_)));
+        assert!(matches!(
+            decode_error(LlamaError::Decode(1), 100, 99),
+            CoreError::ContextOverflow {
+                used: 100,
+                available: 99
+            }
+        ));
+        assert!(matches!(
+            decode_error(LlamaError::Decode(-1), 100, 99),
+            CoreError::Inference(_)
+        ));
+        assert!(matches!(
+            decode_error(LlamaError::Sample, 100, 99),
+            CoreError::Inference(_)
+        ));
     }
 
     #[test]

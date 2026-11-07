@@ -498,7 +498,14 @@ impl<'a> Agent<'a> {
                 // user gets a summary instead of silence.
                 let notice = "Tool budget reached. Answer now using the information you already have; do not call tools.";
                 let output = match self
-                    .generate_with_retry(session, &turn_id, &[], notice, thinking, &mut tool_context)
+                    .generate_with_retry(
+                        session,
+                        &turn_id,
+                        &[],
+                        notice,
+                        thinking,
+                        &mut tool_context,
+                    )
                     .await
                 {
                     Ok(output) => output,
@@ -715,10 +722,14 @@ impl<'a> Agent<'a> {
                         self.events.emit(AgentEvent::Notice {
                             message: "Removed the oldest turn from context.".to_string(),
                         });
-                    } else if keep_tool_images && session.messages.iter().any(|m| {
-                        m.role == crate::session::Role::Tool
-                            && m.attachments.iter().any(|a| a.kind == AttachmentKind::Image)
-                    }) {
+                    } else if keep_tool_images
+                        && session.messages.iter().any(|m| {
+                            m.role == crate::session::Role::Tool
+                                && m.attachments
+                                    .iter()
+                                    .any(|a| a.kind == AttachmentKind::Image)
+                        })
+                    {
                         keep_tool_images = false;
                         self.events.emit(AgentEvent::Notice {
                             message: "Omitted tool screenshots from the model context to make room; user attachments and conversation history are unchanged.".to_string(),
