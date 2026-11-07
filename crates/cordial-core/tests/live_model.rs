@@ -524,6 +524,18 @@ async fn rendered_pdf_worksheet_end_to_end() {
     let Some(mut live) = Live::boot().await else {
         panic!("model unavailable")
     };
+    // The image expands to many more KV tokens than its text marker. Verify
+    // that capacity is checked before decoding, while text alone still fits.
+    let (probe_sink, _probe_receiver) = EventSink::channel();
+    let probe = cordial_core::backend::GenerateRequest {
+        turn_id: "image-capacity-probe".into(),
+        prompt: format!("<|startoftext|><|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n", cordial_core::prompt::DEFAULT_MEDIA_MARKER),
+        media: vec![PathBuf::from(&image)],
+        max_tokens: 8_000,
+        thinking: false,
+        sampling: SamplingParams::default(),
+    };
+    assert!(matches!(live.backend.generate(probe, &probe_sink).await, Err(cordial_core::CoreError::ContextOverflow { .. })), "oversized image prompt should be rejected before decoding");
     // A bounded evaluation should produce diagnostics even if the model loops.
     // Production Task mode retains its larger independent round budget.
     live.max_tool_rounds_override = Some(18);

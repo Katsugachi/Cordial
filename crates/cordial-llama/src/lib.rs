@@ -46,6 +46,8 @@ pub enum LlamaError {
     Decode(i32),
     #[error("sampling failed")]
     Sample,
+    #[error("multimodal prompt uses {used} tokens; {available} are available")]
+    ContextLimit { used: usize, available: usize },
     #[error("multimodal evaluation failed: {0}")]
     Eval(String),
     #[error("path contains a NUL byte: {0}")]
@@ -475,15 +477,20 @@ impl Context {
         Ok(token)
     }
 
-    /// Evaluates a prompt that contains one media marker per attached image.
-    /// Returns the position after the prompt.
+    /// Evaluates a fresh prompt that contains one media marker per attached image.
+    /// Returns the position after the prompt. A nonzero past position cannot
+    /// reliably measure occupied KV cells for M-RoPE and is rejected.
     pub fn eval_multimodal(
         &mut self,
         mtmd: &Mtmd,
         prompt: &str,
         media: &[PathBuf],
         n_past: i32,
+        reserve_tokens: u32,
     ) -> Result<i32, LlamaError> {
+        if n_past != 0 {
+            return Err(LlamaError::Context("multimodal evaluation requires a zero past position".to_string()));
+        }
         let c_prompt = CString::new(prompt)?;
         let c_media: Vec<CString> = media
             .iter()
@@ -491,6 +498,7 @@ impl Context {
             .collect::<Result<_, _>>()?;
         let media_ptrs: Vec<*const c_char> = c_media.iter().map(|c| c.as_ptr()).collect();
         let mut err = err_buffer();
+        let mut token_count = 0usize;
         // SAFETY: all pointers outlive the call; the shim frees its own copies.
         let rc = unsafe {
             sys::cordial_eval_prompt(
@@ -501,10 +509,19 @@ impl Context {
                 media_ptrs.len() as i32,
                 n_past,
                 if n_past >= 0 { 1 } else { 0 },
+                reserve_tokens,
+                &mut token_count,
                 err.as_mut_ptr(),
                 ERR_LEN,
             )
         };
+        if rc == -3 {
+            let past = n_past.max(0) as usize;
+            return Err(LlamaError::ContextLimit {
+                used: token_count.saturating_add(past),
+                available: (self.n_ctx() as usize).saturating_sub(reserve_tokens as usize),
+            });
+        }
         if rc < 0 {
             return Err(LlamaError::Eval(read_err(&err, "unknown mtmd error")));
         }

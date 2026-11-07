@@ -383,7 +383,8 @@ const char * cordial_mtmd_marker(const cordial_mtmd * mm) {
 
 int32_t cordial_eval_prompt(cordial_mtmd * mm, cordial_ctx * ctx, const char * text,
                             const char * const * media_paths, int32_t n_media, int32_t n_past,
-                            int32_t logits_last, char * err, size_t errlen) {
+                            int32_t logits_last, uint32_t reserve_tokens, size_t * token_count,
+                            char * err, size_t errlen) {
     if (mm == nullptr || ctx == nullptr || text == nullptr) {
         set_err(err, errlen, "vision prompt called without a loaded projector");
         return -1;
@@ -434,6 +435,24 @@ int32_t cordial_eval_prompt(cordial_mtmd * mm, cordial_ctx * ctx, const char * t
         }
         set_err(err, errlen, "could not tokenize the multimodal prompt");
         return -1;
+    }
+
+    // Image chunks may use many KV-cache cells but comparatively few M-RoPE
+    // positions. Count actual tokens before encoding/decoding, not positions.
+    const size_t prompt_tokens = mtmd_helper_get_n_tokens(chunks);
+    if (token_count != nullptr) {
+        *token_count = prompt_tokens;
+    }
+    const size_t capacity = llama_n_ctx(ctx->ctx);
+    const size_t past = n_past > 0 ? static_cast<size_t>(n_past) : 0;
+    if (past > capacity || prompt_tokens > capacity - past ||
+        reserve_tokens > capacity - past - prompt_tokens) {
+        mtmd_input_chunks_free(chunks);
+        for (auto * b : bitmaps) {
+            mtmd_bitmap_free(b);
+        }
+        set_err(err, errlen, "multimodal prompt exceeds context capacity");
+        return -3;
     }
 
     llama_pos new_n_past = n_past;

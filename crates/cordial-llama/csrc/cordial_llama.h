@@ -101,10 +101,13 @@ const char *   cordial_mtmd_marker(const cordial_mtmd * mm);
 
 // Tokenizes `text` (which must contain one marker per media file) plus the
 // media files, then evaluates every chunk against `ctx`. Returns the new
-// position after evaluation, or -1 on failure with `err` filled in.
+// position after evaluation, -3 if the chunks plus reserved tokens do not fit,
+// or -1 on another failure with `err` filled in. `token_count` receives the
+// number of prompt tokens, including image tokens.
 int32_t cordial_eval_prompt(cordial_mtmd * mm, cordial_ctx * ctx, const char * text,
                             const char * const * media_paths, int32_t n_media, int32_t n_past,
-                            int32_t logits_last, char * err, size_t errlen);
+                            int32_t logits_last, uint32_t reserve_tokens, size_t * token_count,
+                            char * err, size_t errlen);
 
 #ifdef __cplusplus
 }

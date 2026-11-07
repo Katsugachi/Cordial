@@ -195,6 +195,7 @@ impl<'a> Agent<'a> {
         let mut planning_attempts = 0u32;
         let mut reconcile_next = false;
         let mut suppress_plan_next = false;
+        let mut suppress_fetch_next = false;
         let mut unchanged_plan_updates = 0u32;
         let mut empty_task_retries = 0u32;
         let mut truncated_task_retry = false;
@@ -224,8 +225,12 @@ impl<'a> Agent<'a> {
             } else if suppress_plan_next {
                 tools_for_prompt.retain(|tool| tool.name != "update_plan");
             }
+            if suppress_fetch_next {
+                tools_for_prompt.retain(|tool| tool.name != "web_fetch");
+            }
             reconcile_next = false;
             suppress_plan_next = false;
+            suppress_fetch_next = false;
             let output = match self
                 .generate_with_retry(
                     session,
@@ -469,6 +474,13 @@ impl<'a> Agent<'a> {
                         .unwrap_or_default();
                     let count = repeated_fetches.entry((url, result)).or_default();
                     *count += 1;
+                    if *count == 2 {
+                        suppress_fetch_next = true;
+                        retry_instruction = "The same source has already returned the same result twice. Do not fetch it again. Use the information already obtained, work on the remaining questions, or choose a different source if needed.";
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Avoiding a repeated source fetch; continuing the task.".to_string(),
+                        });
+                    }
                     if *count >= 3 {
                         let reason = if ok {
                             "returned the same result"

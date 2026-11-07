@@ -129,6 +129,8 @@ extern "C" {
         n_media: i32,
         n_past: i32,
         logits_last: i32,
+        reserve_tokens: u32,
+        token_count: *mut usize,
         err: *mut c_char,
         errlen: usize,
     ) -> i32;

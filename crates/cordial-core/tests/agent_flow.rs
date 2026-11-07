@@ -957,3 +957,19 @@ async fn overflow_drops_tool_screenshots_from_prompt_but_keeps_user_images_and_h
         panic!("expected scripted backend");
     }
 }
+
+#[tokio::test]
+async fn repeated_fetch_nudges_task_to_work_before_aborting() {
+    let fixture = Fixture::new("fetch-progress");
+    let mut session = Session::new();
+    let plan = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"running\"}]</parameter></function></tool_call>";
+    let fetch = "<tool_call><function=web_fetch><parameter=url>file://invalid</parameter></function></tool_call>";
+    let read = "<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>";
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Read notes\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let mut cfg = config(Effort::Task, PermissionMode::Auto);
+    cfg.web_enabled = true;
+    let (result, events) = run_turn(&fixture, vec![plan, fetch, fetch, read, done, "The notes say Friday."], cfg, &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(events.iter().any(|event| matches!(event, AgentEvent::Notice { message } if message.contains("Avoiding a repeated source fetch"))));
+    assert!(session.messages.iter().any(|m| m.role == Role::Tool && m.content.contains("ship on Friday")));
+}

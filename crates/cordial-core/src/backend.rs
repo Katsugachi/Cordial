@@ -377,11 +377,13 @@ fn run_generation_inner(
             .replace(crate::prompt::DEFAULT_MEDIA_MARKER, &state.marker);
         state
             .context
-            .eval_multimodal(mtmd, &prompt, &request.media, 0)
-            .map_err(|err| CoreError::Inference(err.to_string()))?;
-        // Images expand to many tokens that are absent from text tokenization.
-        // Check the real context position before generating, rather than
-        // discovering the missing space halfway through a streamed answer.
+            .eval_multimodal(mtmd, &prompt, &request.media, 0, request.max_tokens)
+            .map_err(|err| match err {
+                LlamaError::ContextLimit { used, available } => CoreError::ContextOverflow { used, available },
+                other => CoreError::Inference(other.to_string()),
+            })?;
+        // Positions are distinct from KV cells for M-RoPE; both must leave
+        // room for the requested answer.
         let used = (state.context.pos_max() + 1).max(0) as usize;
         if used.saturating_add(request.max_tokens as usize) > n_ctx {
             return Err(CoreError::ContextOverflow {
