@@ -263,7 +263,10 @@ impl Live {
             .map(|r| format!("{:?}", r.stop))
             .unwrap_or_else(|e| format!("error: {e}"));
 
-        eprintln!("EVAL progress turn stop={stop}; diagnostics={:?}", self.last_diagnostics);
+        eprintln!(
+            "EVAL progress turn stop={stop}; diagnostics={:?}",
+            self.last_diagnostics
+        );
 
         let answer = session
             .messages

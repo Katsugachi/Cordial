@@ -824,10 +824,14 @@ async fn empty_task_responses_are_retried_but_bounded() {
         config(Effort::Task, PermissionMode::Auto),
         &mut session,
         None,
-    ).await;
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Retrying an empty task response"))));
-    assert!(session.messages.iter().any(|m| m.role == Role::Assistant && m.content == "Final answer."));
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.role == Role::Assistant && m.content == "Final answer."));
 
     let mut session = Session::new();
     let (result, _) = run_turn(
@@ -836,6 +840,7 @@ async fn empty_task_responses_are_retried_but_bounded() {
         config(Effort::Task, PermissionMode::Auto),
         &mut session,
         None,
-    ).await;
+    )
+    .await;
     assert_eq!(result.stop, StopReason::EmptyAnswer);
 }
