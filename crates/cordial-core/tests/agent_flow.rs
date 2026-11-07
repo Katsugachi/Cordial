@@ -844,3 +844,58 @@ async fn empty_task_responses_are_retried_but_bounded() {
     .await;
     assert_eq!(result.stop, StopReason::EmptyAnswer);
 }
+
+#[tokio::test]
+async fn truncated_task_answer_retries_and_never_claims_completion() {
+    use cordial_core::backend::GenStop;
+    let fixture = Fixture::new("truncated-task");
+    let runtime = fixture.runtime(Effort::Task);
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Answer\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    for (replies, stops, expected) in [
+        (vec![done, "Incomplete ans", "Complete answer."], vec![GenStop::EndOfTurn, GenStop::MaxTokens, GenStop::EndOfTurn], StopReason::Answered),
+        (vec![done, "Incomplete ans", "Still incom"], vec![GenStop::EndOfTurn, GenStop::MaxTokens, GenStop::MaxTokens], StopReason::Failed),
+    ] {
+        let mut session = Session::new();
+        let mut backend = Backend::Scripted(ScriptedBackend::new(replies).with_stops(stops));
+        let gate = ApprovalGate::new();
+        let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+        let (sink, _receiver) = EventSink::channel();
+        let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate, events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
+        let result = agent.run(&mut session, "Answer the task".into(), vec![]).await.unwrap();
+        assert_eq!(result.stop, expected);
+        let answer = &session.messages.last().unwrap().content;
+        if expected == StopReason::Failed {
+            assert!(answer.starts_with("Task incomplete: the response was cut off"));
+        } else {
+            assert_eq!(answer, "Complete answer.");
+        }
+    }
+}
+
+#[tokio::test]
+async fn overflow_drops_tool_screenshots_from_prompt_but_keeps_user_images_and_history() {
+    use cordial_core::session::{PlanStatus, PlanStep};
+    let fixture = Fixture::new("overflow-tool-images");
+    let runtime = fixture.runtime(Effort::Task);
+    let mut session = Session::new();
+    let mut screenshot = Message::tool_result("old", "Page text remains available.");
+    screenshot.attachments.push(Attachment { kind: AttachmentKind::Image, name: "screenshot.png".into(), path: fixture.workspace.join("screenshot.png").display().to_string() });
+    session.push(screenshot);
+    session.plan.push(PlanStep { id: 0, title: "Answer".into(), status: PlanStatus::Running, note: String::new() });
+    let done = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Answer\",\"status\":\"done\"}]</parameter></function></tool_call>";
+    let mut scripted = ScriptedBackend::new(vec![done, "Done."]);
+    scripted.fail_once(ScriptFailure::Overflow);
+    let mut backend = Backend::Scripted(scripted);
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, _receiver) = EventSink::channel();
+    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate, events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
+    let user_image = fixture.workspace.join("image.png");
+    let result = agent.run(&mut session, "Use my image".into(), vec![Attachment { kind: AttachmentKind::Image, name: "image.png".into(), path: user_image.display().to_string() }]).await.unwrap();
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(session.messages[0].attachments.len(), 1);
+    if let Backend::Scripted(scripted) = &backend {
+        assert!(scripted.requests.iter().all(|request| request.media == vec![user_image.clone()]));
+        assert!(scripted.requests[0].prompt.contains("Page text remains available"));
+    } else { panic!("expected scripted backend"); }
+}

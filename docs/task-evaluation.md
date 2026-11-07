@@ -40,6 +40,9 @@ also remained unfinished. In [run 41919253067](https://github.com/Katsugachi/Cor
 the model again used Python, but used an incorrect cone formula and treated the
 cube's body diagonal as an edge; it correctly stated that the rod fits despite
 having run a reversed Python inequality. The checklist remained incomplete.
+In [run 42373667799](https://github.com/Katsugachi/Cordial/actions/runs/42373667799),
+Python ran but the final answer again had an incorrect cone formula, reversed
+rod-fit conclusion, incorrect cube volume and an incomplete checklist.
 The isolated runtime passed its Linux security tests,
 but it is not enabled in default desktop builds. PDF diagrams require visual rendering,
 not text extraction alone.
@@ -57,4 +60,8 @@ source URL or checklist; the English task stopped after repeated HTTP 403s.
 Both runs failed the end-to-end research tests. In [run 41919253067](https://github.com/Katsugachi/Cordial/actions/runs/41919253067),
 the expanded architecture task ended with an incomplete answer and no checklist;
 the English task opened sources but returned no final answer with its checklist
-unfinished. These results remain failures even though some tools succeeded.
+unfinished. In [run 42373667799](https://github.com/Katsugachi/Cordial/actions/runs/42373667799),
+the model used sources and Python for the architecture worksheet but calculated
+flooring from the pack size rather than the floor area; its checklist was absent.
+The English task opened sources but stopped with a decode failure after context
+compaction. These results remain failures even though some tools succeeded.

@@ -114,6 +114,12 @@ jobs:
         run: python3 scripts/ci/test_python_packaging.py
       - name: Test the opt-in Python desktop integration
         run: CARGO_BUILD_JOBS=2 scripts/ci/report.sh cargo test -p cordial-app --features experimental-python
+      - name: Build and inspect an experimental Linux bundle
+        run: |
+          cd crates/cordial-app
+          CARGO_BUILD_JOBS=2 ../../ui/node_modules/.bin/tauri build --debug --bundles deb --features experimental-python --config tauri.python.conf.json
+          cd ../..
+          python3 scripts/ci/check_python_deb.py
 
   ui:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

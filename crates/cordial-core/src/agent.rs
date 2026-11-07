@@ -197,6 +197,8 @@ impl<'a> Agent<'a> {
         let mut suppress_plan_next = false;
         let mut unchanged_plan_updates = 0u32;
         let mut empty_task_retries = 0u32;
+        let mut truncated_task_retry = false;
+        let mut tool_context = (self.config.max_tool_result_chars, true);
         let mut repeated_fetches: HashMap<(String, String), u32> = HashMap::new();
 
         let outcome = 'turn: loop {
@@ -231,6 +233,7 @@ impl<'a> Agent<'a> {
                     &tools_for_prompt,
                     retry_instruction,
                     thinking,
+                    &mut tool_context,
                 )
                 .await
             {
@@ -284,6 +287,35 @@ impl<'a> Agent<'a> {
                 });
                 retry_instruction = "First call update_plan with a JSON checklist. Example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet.";
                 continue;
+            }
+            if self.config.effort == Effort::Task
+                && output.stop == GenStop::MaxTokens
+                && parsed.calls.is_empty()
+            {
+                if !truncated_task_retry {
+                    truncated_task_retry = true;
+                    thinking = false;
+                    retry_instruction = "The previous response was cut off by the output limit. Continue the task or provide a concise, complete answer covering every part. Do not claim unfinished work is done.";
+                    self.events.emit(AgentEvent::GenerationReset {
+                        turn_id: turn_id.clone(),
+                    });
+                    self.events.emit(AgentEvent::Notice {
+                        message: "Retrying a truncated task response.".to_string(),
+                    });
+                    continue;
+                }
+                let content = format!(
+                    "Task incomplete: the response was cut off by the output limit.\n\n{}",
+                    parsed.content
+                );
+                let message = Message::assistant(content, parsed.thinking, vec![]);
+                self.events.emit(AgentEvent::AssistantMessage {
+                    turn_id: turn_id.clone(),
+                    message: message.clone(),
+                });
+                session.push(message);
+                self.checkpoint(session);
+                break StopReason::Failed;
             }
             let ambiguous_search = self.config.web_enabled
                 && parsed.calls.is_empty()
@@ -466,7 +498,7 @@ impl<'a> Agent<'a> {
                 // user gets a summary instead of silence.
                 let notice = "Tool budget reached. Answer now using the information you already have; do not call tools.";
                 let output = match self
-                    .generate_with_retry(session, &turn_id, &[], notice, thinking)
+                    .generate_with_retry(session, &turn_id, &[], notice, thinking, &mut tool_context)
                     .await
                 {
                     Ok(output) => output,
@@ -653,9 +685,10 @@ impl<'a> Agent<'a> {
         tools: &[ToolSpec],
         system_suffix: &str,
         thinking: bool,
+        tool_context: &mut (usize, bool),
     ) -> Result<GenerateOutput, CoreError> {
         let mut attempts = 0;
-        let mut tool_result_limit = self.config.max_tool_result_chars;
+        let (mut tool_result_limit, mut keep_tool_images) = *tool_context;
         loop {
             attempts += 1;
             let request = self.build_request(
@@ -664,17 +697,31 @@ impl<'a> Agent<'a> {
                 tools,
                 system_suffix,
                 thinking,
-                tool_result_limit,
+                (tool_result_limit, keep_tool_images),
             );
             match self.backend.generate(request, self.events).await {
-                Ok(output) => return Ok(output),
+                Ok(output) => {
+                    *tool_context = (tool_result_limit, keep_tool_images);
+                    return Ok(output);
+                }
                 Err(err @ CoreError::ContextOverflow { .. }) => {
                     if attempts >= 4 {
                         return Err(err);
                     }
+                    self.events.emit(AgentEvent::GenerationReset {
+                        turn_id: turn_id.to_string(),
+                    });
                     if session.trim_oldest_turn() {
                         self.events.emit(AgentEvent::Notice {
                             message: "Removed the oldest turn from context.".to_string(),
+                        });
+                    } else if keep_tool_images && session.messages.iter().any(|m| {
+                        m.role == crate::session::Role::Tool
+                            && m.attachments.iter().any(|a| a.kind == AttachmentKind::Image)
+                    }) {
+                        keep_tool_images = false;
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Omitted tool screenshots from the model context to make room; user attachments and conversation history are unchanged.".to_string(),
                         });
                     } else {
                         let reduced = (tool_result_limit / 2).max(512);
@@ -705,13 +752,17 @@ impl<'a> Agent<'a> {
         tools: &[ToolSpec],
         system_suffix: &str,
         thinking: bool,
-        tool_result_limit: usize,
+        tool_context: (usize, bool),
     ) -> GenerateRequest {
+        let (tool_result_limit, keep_tool_images) = tool_context;
         let mut system = prompt::system_prompt(
             self.config.effort,
             self.config.permission_mode,
             self.config.web_enabled,
         );
+        if !keep_tool_images {
+            system.push_str("\n\nTool screenshots are omitted from this context to save space. Use page text where possible and do not claim to have seen visual details that are unavailable. User-provided images are unchanged.\n");
+        }
         if tools.iter().any(|tool| tool.name == "python_calculate") {
             system.push_str("\n\nFor Python calculations use python_calculate with code that prints results. It executes in memory without host files; do not save temporary scripts in the workspace. Check that the code implements the correct formula, use the actual returned values in your final answer, and verify that any inequalities support the conclusion.\n");
         }
@@ -764,6 +815,7 @@ impl<'a> Agent<'a> {
             thinking,
             max_tool_result_chars: tool_result_limit,
             keep_image_turns: self.config.keep_image_turns,
+            keep_tool_images,
         });
         GenerateRequest {
             turn_id: turn_id.to_string(),

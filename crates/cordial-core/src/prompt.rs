@@ -50,6 +50,8 @@ pub struct PromptOptions<'a> {
     /// stop being re-encoded, which is what keeps a long session inside the
     /// context window.
     pub keep_image_turns: usize,
+    /// Whether to include screenshots returned by tools (user images are separate).
+    pub keep_tool_images: bool,
 }
 
 /// Renders a full prompt, ending with the assistant generation prefix.
@@ -94,7 +96,7 @@ pub fn render(options: &PromptOptions<'_>) -> RenderedPrompt {
                 options.media_marker,
                 &mut media,
                 options.max_tool_result_chars,
-                with_images,
+                with_images && options.keep_tool_images,
             ),
         }
     }
@@ -359,6 +361,7 @@ mod tests {
             thinking: true,
             max_tool_result_chars: 4_000,
             keep_image_turns: 2,
+            keep_tool_images: true,
         }
     }
 

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use cordial_llama::{Context, ContextOptions, Model, Mtmd, Sampler, SamplingParams};
+use cordial_llama::{Context, ContextOptions, LlamaError, Model, Mtmd, Sampler, SamplingParams};
 
 use crate::error::CoreError;
 use crate::events::{AgentEvent, EventSink};
@@ -329,6 +329,16 @@ fn run_generation(
     result
 }
 
+fn decode_error(err: LlamaError, used: usize, available: usize) -> CoreError {
+    // llama_decode returns 1 when it cannot allocate a KV-cache slot. Other
+    // codes are not evidence of context overflow and must remain failures.
+    if matches!(&err, LlamaError::Decode(1)) {
+        CoreError::ContextOverflow { used, available }
+    } else {
+        CoreError::Inference(err.to_string())
+    }
+}
+
 fn run_generation_inner(
     state: &mut WorkerState,
     request: GenerateRequest,
@@ -369,6 +379,16 @@ fn run_generation_inner(
             .context
             .eval_multimodal(mtmd, &prompt, &request.media, 0)
             .map_err(|err| CoreError::Inference(err.to_string()))?;
+        // Images expand to many tokens that are absent from text tokenization.
+        // Check the real context position before generating, rather than
+        // discovering the missing space halfway through a streamed answer.
+        let used = (state.context.pos_max() + 1).max(0) as usize;
+        if used.saturating_add(request.max_tokens as usize) > n_ctx {
+            return Err(CoreError::ContextOverflow {
+                used,
+                available: n_ctx.saturating_sub(request.max_tokens as usize),
+            });
+        }
     } else {
         if !state.cache_exact {
             state.context.clear();
@@ -405,7 +425,7 @@ fn run_generation_inner(
             state
                 .context
                 .decode(&tokens[start..], start as i32)
-                .map_err(|err| CoreError::Inference(err.to_string()))?;
+                .map_err(|err| decode_error(err, tokens.len(), n_ctx.saturating_sub(request.max_tokens as usize)))?;
         }
         state.cache_exact = true;
         state.cached_tokens = tokens.clone();
@@ -453,7 +473,7 @@ fn run_generation_inner(
                     stop = GenStop::Cancelled;
                     break;
                 }
-                return Err(CoreError::Inference(err.to_string()));
+                return Err(decode_error(err, pos.max(0) as usize + 1, n_ctx));
             }
             pos = state.context.pos_max() + 1;
             state.cached_tokens.push(token);
@@ -493,7 +513,7 @@ fn run_generation_inner(
                 stop = GenStop::Cancelled;
                 break;
             }
-            return Err(CoreError::Inference(err.to_string()));
+            return Err(decode_error(err, pos.max(0) as usize + 1, n_ctx));
         }
         pos = state.context.pos_max() + 1;
         state.cached_tokens.push(token);
@@ -539,6 +559,7 @@ pub struct ScriptedBackend {
     pub requests: Vec<GenerateRequest>,
     fallback: String,
     failures: VecDeque<ScriptFailure>,
+    stops: VecDeque<GenStop>,
     cancel: Option<Arc<AtomicBool>>,
 }
 
@@ -553,12 +574,19 @@ impl ScriptedBackend {
             requests: Vec::new(),
             fallback: "I do not have a scripted reply for that.".to_string(),
             failures: VecDeque::new(),
+            stops: VecDeque::new(),
             cancel: None,
         }
     }
 
     pub fn with_fallback(mut self, reply: impl Into<String>) -> Self {
         self.fallback = reply.into();
+        self
+    }
+
+    /// Supplies stop reasons for scripted replies; unspecified replies end normally.
+    pub fn with_stops(mut self, stops: impl IntoIterator<Item = GenStop>) -> Self {
+        self.stops = stops.into_iter().collect();
         self
     }
 
@@ -620,7 +648,7 @@ impl ScriptedBackend {
 
         Ok(GenerateOutput {
             text: reply,
-            stop: GenStop::EndOfTurn,
+            stop: self.stops.pop_front().unwrap_or(GenStop::EndOfTurn),
             prompt_tokens,
             output_tokens: 32,
             tokens_per_second: 42.0,
@@ -685,6 +713,13 @@ mod tests {
             thinking: true,
             sampling: SamplingParams::default(),
         }
+    }
+
+    #[test]
+    fn only_kv_slot_exhaustion_is_classified_as_context_overflow() {
+        assert!(matches!(decode_error(LlamaError::Decode(1), 100, 99), CoreError::ContextOverflow { used: 100, available: 99 }));
+        assert!(matches!(decode_error(LlamaError::Decode(-1), 100, 99), CoreError::Inference(_)));
+        assert!(matches!(decode_error(LlamaError::Sample, 100, 99), CoreError::Inference(_)));
     }
 
     #[test]
