@@ -199,7 +199,7 @@ impl<'a> Agent<'a> {
         let mut unchanged_plan_updates = 0u32;
         let mut empty_task_retries = 0u32;
         let mut truncated_task_retry = false;
-        let mut tool_context = (self.config.max_tool_result_chars, true);
+        let mut tool_context = (self.config.max_tool_result_chars, true, true);
         let mut repeated_fetches: HashMap<(String, String), u32> = HashMap::new();
 
         let outcome = 'turn: loop {
@@ -705,10 +705,10 @@ impl<'a> Agent<'a> {
         tools: &[ToolSpec],
         system_suffix: &str,
         thinking: bool,
-        tool_context: &mut (usize, bool),
+        tool_context: &mut (usize, bool, bool),
     ) -> Result<GenerateOutput, CoreError> {
         let mut attempts = 0;
-        let (mut tool_result_limit, mut keep_tool_images) = *tool_context;
+        let (mut tool_result_limit, mut keep_tool_images, mut keep_current_thinking) = *tool_context;
         loop {
             attempts += 1;
             let request = self.build_request(
@@ -717,15 +717,16 @@ impl<'a> Agent<'a> {
                 tools,
                 system_suffix,
                 thinking,
-                (tool_result_limit, keep_tool_images),
+                (tool_result_limit, keep_tool_images, keep_current_thinking),
             );
             match self.backend.generate(request, self.events).await {
                 Ok(output) => {
-                    *tool_context = (tool_result_limit, keep_tool_images);
+                    *tool_context = (tool_result_limit, keep_tool_images, keep_current_thinking);
                     return Ok(output);
                 }
                 Err(err @ CoreError::ContextOverflow { .. }) => {
-                    if attempts >= 4 {
+                    let max_attempts = if self.config.effort == Effort::Task { 6 } else { 4 };
+                    if attempts >= max_attempts {
                         return Err(err);
                     }
                     self.events.emit(AgentEvent::GenerationReset {
@@ -734,6 +735,16 @@ impl<'a> Agent<'a> {
                     if session.trim_oldest_turn() {
                         self.events.emit(AgentEvent::Notice {
                             message: "Removed the oldest turn from context.".to_string(),
+                        });
+                    } else if self.config.effort == Effort::Task && keep_current_thinking
+                        && session.messages.iter().rev()
+                            .take_while(|m| m.role != crate::session::Role::User)
+                            .any(|m| m.role == crate::session::Role::Assistant
+                                && m.thinking.as_deref().is_some_and(|text| !text.trim().is_empty()))
+                    {
+                        keep_current_thinking = false;
+                        self.events.emit(AgentEvent::Notice {
+                            message: "Omitted earlier reasoning from the model context to make room; the transcript and tool results are unchanged.".to_string(),
                         });
                     } else if keep_tool_images
                         && session.messages.iter().any(|m| {
@@ -776,9 +787,9 @@ impl<'a> Agent<'a> {
         tools: &[ToolSpec],
         system_suffix: &str,
         thinking: bool,
-        tool_context: (usize, bool),
+        tool_context: (usize, bool, bool),
     ) -> GenerateRequest {
-        let (tool_result_limit, keep_tool_images) = tool_context;
+        let (tool_result_limit, keep_tool_images, keep_current_thinking) = tool_context;
         let mut system = prompt::system_prompt(
             self.config.effort,
             self.config.permission_mode,
@@ -840,6 +851,7 @@ impl<'a> Agent<'a> {
             max_tool_result_chars: tool_result_limit,
             keep_image_turns: self.config.keep_image_turns,
             keep_tool_images,
+            keep_current_thinking,
         });
         GenerateRequest {
             turn_id: turn_id.to_string(),
@@ -997,4 +1009,46 @@ fn thumbnail_for(media: &[std::path::PathBuf]) -> Option<String> {
         "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
     ))
+}
+
+#[cfg(test)]
+mod context_compaction_tests {
+    use super::*;
+    use crate::backend::{ScriptFailure, ScriptedBackend};
+    use crate::session::Role;
+
+    #[tokio::test]
+    async fn overflow_omits_current_reasoning_without_changing_transcript() {
+        let settings = Settings { effort: Effort::Task, ..Settings::default() };
+        let mut cfg = AgentConfig::from_settings(&settings);
+        cfg.thinking = false;
+        let root = std::env::temp_dir().join(format!("cordial-reasoning-test-{}", uuid::Uuid::new_v4()));
+        let tools = ToolRuntime::new(root.clone(), root.join("scratch"), Effort::Task).unwrap();
+        let mut scripted = ScriptedBackend::new(vec!["Done.", "Done again."]);
+        scripted.fail_once(ScriptFailure::Overflow);
+        let mut backend = Backend::Scripted(scripted);
+        let gate = ApprovalGate::new();
+        let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+        let (sink, _receiver) = EventSink::channel();
+        let mut session = Session::new();
+        session.push(Message::user("Research this", vec![]));
+        session.push(Message::assistant("Visible action", Some("private long reasoning".into()), vec![]));
+        session.push(Message::tool_result("call", "source result"));
+        let mut agent = Agent { backend: &mut backend, tools: &tools, policy: &mut policy, approvals: &gate, events: &sink, config: cfg, store: None };
+        let mut context = (6000, true, true);
+        agent.generate_with_retry(&mut session, "t", &[], "", false, &mut context).await.unwrap();
+        agent.generate_with_retry(&mut session, "t", &[], "", false, &mut context).await.unwrap();
+        drop(agent);
+        assert!(!context.2);
+        assert_eq!(session.messages[1].thinking.as_deref(), Some("private long reasoning"));
+        assert_eq!(session.messages[1].role, Role::Assistant);
+        if let Backend::Scripted(scripted) = &backend {
+            assert_eq!(scripted.requests.len(), 2);
+            for request in &scripted.requests {
+                assert!(!request.prompt.contains("private long reasoning"));
+                assert!(request.prompt.contains("Visible action"));
+                assert!(request.prompt.contains("source result"));
+            }
+        } else { panic!("expected scripted backend"); }
+    }
 }

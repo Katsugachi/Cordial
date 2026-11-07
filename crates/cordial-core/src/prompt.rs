@@ -52,6 +52,8 @@ pub struct PromptOptions<'a> {
     pub keep_image_turns: usize,
     /// Whether to include screenshots returned by tools (user images are separate).
     pub keep_tool_images: bool,
+    /// Whether current-turn assistant reasoning is included in the prompt.
+    pub keep_current_thinking: bool,
 }
 
 /// Renders a full prompt, ending with the assistant generation prefix.
@@ -87,7 +89,8 @@ pub fn render(options: &PromptOptions<'_>) -> RenderedPrompt {
                 with_images,
             ),
             Role::Assistant => {
-                let keep_thinking = last_user.map(|last| index > last).unwrap_or(false);
+                let keep_thinking = options.keep_current_thinking
+                    && last_user.map(|last| index > last).unwrap_or(false);
                 push_assistant(&mut out, message, keep_thinking);
             }
             Role::Tool => push_tool(
@@ -362,6 +365,7 @@ mod tests {
             max_tool_result_chars: 4_000,
             keep_image_turns: 2,
             keep_tool_images: true,
+            keep_current_thinking: true,
         }
     }
 
