@@ -103,15 +103,32 @@ pub async fn search(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     }
 }
 
-async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<(Vec<SearchHit>, bool), CoreError> {
+async fn run_search(
+    runtime: &ToolRuntime,
+    query: &str,
+) -> Result<(Vec<SearchHit>, bool), CoreError> {
     if let Ok(hits) = run_duckduckgo_search(runtime, query).await {
         return Ok((hits, false));
     }
-    let response = runtime.http().get("https://en.wikipedia.org/w/api.php")
-        .query(&[("action", "query"), ("list", "search"), ("format", "json"), ("utf8", "1"), ("srlimit", "10"), ("srsearch", query)])
-        .send().await.map_err(|err| CoreError::Network(err.to_string()))?;
+    let response = runtime
+        .http()
+        .get("https://en.wikipedia.org/w/api.php")
+        .query(&[
+            ("action", "query"),
+            ("list", "search"),
+            ("format", "json"),
+            ("utf8", "1"),
+            ("srlimit", "10"),
+            ("srsearch", query),
+        ])
+        .send()
+        .await
+        .map_err(|err| CoreError::Network(err.to_string()))?;
     if !response.status().is_success() {
-        return Err(CoreError::Network(format!("Wikipedia fallback returned HTTP {}", response.status())));
+        return Err(CoreError::Network(format!(
+            "Wikipedia fallback returned HTTP {}",
+            response.status()
+        )));
     }
     let hits = parse_wikipedia_results(&read_bounded(response).await?)?;
     Ok((hits, true))
@@ -120,17 +137,29 @@ async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<(Vec<SearchHit
 fn parse_wikipedia_results(body: &str) -> Result<Vec<SearchHit>, CoreError> {
     let value: serde_json::Value = serde_json::from_str(body)
         .map_err(|err| CoreError::Network(format!("invalid Wikipedia search response: {err}")))?;
-    let entries = value.pointer("/query/search").and_then(|v| v.as_array())
+    let entries = value
+        .pointer("/query/search")
+        .and_then(|v| v.as_array())
         .ok_or_else(|| CoreError::Network("invalid Wikipedia search response".to_string()))?;
-    Ok(entries.iter().filter_map(|entry| {
-        let pageid = entry.get("pageid")?.as_u64()?;
-        let title = truncate_chars(entry.get("title")?.as_str()?, 200);
-        let snippet = clean(entry.get("snippet").and_then(|v| v.as_str()).unwrap_or(""));
-        Some(SearchHit { title, url: format!("https://en.wikipedia.org/?curid={pageid}"), snippet })
-    }).collect())
+    Ok(entries
+        .iter()
+        .filter_map(|entry| {
+            let pageid = entry.get("pageid")?.as_u64()?;
+            let title = truncate_chars(entry.get("title")?.as_str()?, 200);
+            let snippet = clean(entry.get("snippet").and_then(|v| v.as_str()).unwrap_or(""));
+            Some(SearchHit {
+                title,
+                url: format!("https://en.wikipedia.org/?curid={pageid}"),
+                snippet,
+            })
+        })
+        .collect())
 }
 
-async fn run_duckduckgo_search(runtime: &ToolRuntime, query: &str) -> Result<Vec<SearchHit>, CoreError> {
+async fn run_duckduckgo_search(
+    runtime: &ToolRuntime,
+    query: &str,
+) -> Result<Vec<SearchHit>, CoreError> {
     // Primary: the HTML endpoint. Fallback: the lite endpoint.
     let primary = runtime
         .http()
@@ -448,7 +477,9 @@ mod tests {
         assert!(!hits[0].snippet.contains("<span"));
         assert!(parse_wikipedia_results("not json").is_err());
         assert!(parse_wikipedia_results(r#"{"error":{"code":"bad"}}"#).is_err());
-        assert!(parse_wikipedia_results(r#"{"query":{"search":[]}}"#).unwrap().is_empty());
+        assert!(parse_wikipedia_results(r#"{"query":{"search":[]}}"#)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
