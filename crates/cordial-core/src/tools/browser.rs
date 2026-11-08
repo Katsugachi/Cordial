@@ -627,15 +627,31 @@ mod tests {
             let _ = socket.next().await;
         });
         let (socket, _) = connect_async(format!("ws://{addr}")).await.unwrap();
-        let child = tokio::process::Command::new("sleep").arg("120").kill_on_drop(true).spawn().unwrap();
+        let child = tokio::process::Command::new("sleep")
+            .arg("120")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
         let pid = child.id().unwrap();
-        let profile = std::env::temp_dir().join(format!("cordial-browser-test-{}", uuid::Uuid::new_v4()));
+        let profile =
+            std::env::temp_dir().join(format!("cordial-browser-test-{}", uuid::Uuid::new_v4()));
         tokio::fs::create_dir_all(&profile).await.unwrap();
-        let session = BrowserSession { child, socket, next_id: 1, user_data_dir: profile.clone(), viewport: (1, 1) };
-        tokio::time::timeout(Duration::from_secs(5), session.shutdown()).await.unwrap();
+        let session = BrowserSession {
+            child,
+            socket,
+            next_id: 1,
+            user_data_dir: profile.clone(),
+            viewport: (1, 1),
+        };
+        tokio::time::timeout(Duration::from_secs(5), session.shutdown())
+            .await
+            .unwrap();
         server.await.unwrap();
         assert!(!profile.exists());
-        assert!(!Path::new(&format!("/proc/{pid}")).exists(), "browser child was not reaped");
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "browser child was not reaped"
+        );
     }
 
     #[test]
