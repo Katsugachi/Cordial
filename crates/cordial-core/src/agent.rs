@@ -21,7 +21,7 @@ use crate::permissions::{Permission, PermissionPolicy};
 use crate::prompt::{self, PromptOptions, DEFAULT_MEDIA_MARKER};
 use crate::protocol::parse_reply;
 use crate::session::{
-    Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Session, SessionStore, ToolCall,
+    Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Role, Session, SessionStore, ToolCall,
 };
 use crate::settings::{Effort, PermissionMode, Settings};
 use crate::tools::{self, ToolRuntime, ToolSpec};
@@ -180,6 +180,20 @@ impl<'a> Agent<'a> {
             turn_id: turn_id.clone(),
             session_id: session.id.clone(),
         });
+
+        // A checkpoint may have been saved while a tool was running. Never
+        // replay it automatically: a write might already have taken effect.
+        // Close only the trailing unresolved calls with an explicit unknown
+        // outcome before accepting the next user message.
+        let recovered = recover_interrupted_calls(session);
+        if !recovered.is_empty() {
+            self.events.emit(AgentEvent::Notice {
+                message: "An earlier tool call was interrupted; its outcome is unknown. Check the workspace before retrying writes.".to_string(),
+            });
+            for result in recovered {
+                session.push(result);
+            }
+        }
 
         // A finished checklist belongs to the preceding task, not a new turn.
         // Keep unfinished plans so the user can ask the agent to continue them.
@@ -465,6 +479,7 @@ impl<'a> Agent<'a> {
                         message: result.clone(),
                     });
                     session.push(result);
+                    self.checkpoint(session);
                     continue;
                 }
                 if self.config.effort == Effort::Task && call.name == "web_fetch" {
@@ -949,6 +964,19 @@ impl<'a> Agent<'a> {
             .map(|flag| flag.load(Ordering::Relaxed))
             .unwrap_or(false)
     }
+}
+
+fn recover_interrupted_calls(session: &Session) -> Vec<Message> {
+    let Some(index) = session.messages.iter().rposition(|message| message.role != Role::Tool) else {
+        return vec![];
+    };
+    let assistant = &session.messages[index];
+    if assistant.role != Role::Assistant {
+        return vec![];
+    }
+    assistant.tool_calls.iter().filter(|call| {
+        !session.messages[index + 1..].iter().any(|message| message.tool_call_id.as_deref() == Some(call.id.as_str()))
+    }).map(|call| Message::tool_result(call.id.clone(), "The previous tool call was interrupted. Its outcome is unknown; do not assume it failed or repeat a write without checking the workspace and requesting any required approval.")).collect()
 }
 
 fn plan_all_done(session: &Session) -> bool {

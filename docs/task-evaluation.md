@@ -99,4 +99,9 @@ for area 351 and perimeter 80. English exhausted its budget and invented
 attributions for the examples. The PDF answer correctly said the rod fits but
 mangled the calculation, gave the wrong cone area and treated the cube diagonal
 as an edge; its checklist was 1/3. These results remain failures even though
-some tools succeeded.
+some tools succeeded. In run 42447192434 (seed 3792486779), architecture
+exhausted its budget without a checklist or summary; the expected area was 250,
+perimeter 70, 110 packs and $5280. English exhausted its budget and again treated
+figurative images as missing pictures. The PDF answer again used an incorrect
+cone formula, compared the rod against the base diagonal, and treated the cube's
+diagonal as an edge; its checklist remained 1/3.

@@ -127,6 +127,9 @@ Task mode is experimental. Completed and partial Task answers carry a reminder t
 check results independently. The checklist reflects the model’s own reports and is
 not proof of correctness. Work stops when the app exits, when its budget runs
 out, or when the model fails; checkpointing does not automatically resume it.
+On a follow-up turn, an interrupted tool call is recorded as having an unknown
+outcome and is not automatically replayed. A write may already have occurred, so
+check the workspace before retrying.
 DOCX support handles a bounded subset of WordprocessingML, not all document
 features. Review output documents and back up originals. Real-model held-out
 complex-task testing is still required before claiming reliable completion.

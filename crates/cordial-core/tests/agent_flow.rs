@@ -134,6 +134,48 @@ async fn run_turn(
 }
 
 #[tokio::test]
+async fn interrupted_tool_checkpoint_is_closed_without_replaying_writes() {
+    use cordial_core::session::{SessionStore, ToolArgument, ToolCall};
+    let fixture = Fixture::new("interrupted-checkpoint");
+    let store = SessionStore::new(fixture.scratch.join("sessions"));
+    let mut session = Session::new();
+    session.push(Message::user("Do work", vec![]));
+    let call = |id: &str| ToolCall { id: id.into(), name: "write_file".into(), arguments: vec![
+        ToolArgument { name: "path".into(), value: "should-not-be-created.txt".into() }
+    ] };
+    session.push(Message::assistant("", None, vec![call("first"), call("second")]));
+    session.push(Message::tool_result("first", "First call completed."));
+    store.save(&session).unwrap();
+    let mut session = store.load(&session.id).unwrap();
+    let runtime = fixture.runtime(Effort::Low);
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["Please check the interrupted action."]));
+    let gate = ApprovalGate::new();
+    let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+    let (sink, mut receiver) = EventSink::channel();
+    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
+        events: &sink, config: config(Effort::Low, PermissionMode::Auto), store: Some(&store) };
+    agent.run(&mut session, "Continue".into(), vec![]).await.unwrap();
+    drop(agent);
+    drop(sink);
+    let saved = store.load(&session.id).unwrap();
+    let results: Vec<_> = saved.messages.iter().filter(|m| m.role == Role::Tool).collect();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].content, "First call completed.");
+    assert_eq!(results[1].tool_call_id.as_deref(), Some("second"));
+    assert!(results[1].content.contains("outcome is unknown"));
+    assert!(!fixture.workspace.join("should-not-be-created.txt").exists());
+    let mut recovered = 0;
+    while let Some(event) = receiver.recv().await {
+        match event {
+            AgentEvent::Notice { message } if message.contains("outcome is unknown") => recovered += 1,
+            AgentEvent::ToolCallStarted { .. } => panic!("interrupted tool was replayed"),
+            _ => {}
+        }
+    }
+    assert_eq!(recovered, 1);
+}
+
+#[tokio::test]
 async fn plain_answer_is_persisted_and_streamed() {
     let fixture = Fixture::new("plain");
     let mut session = Session::new();
