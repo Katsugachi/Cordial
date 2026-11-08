@@ -37,6 +37,10 @@ clears remembered grants.
   and browser page requests can reach localhost or private networks. Do not use
   web or browser tools with untrusted content where internal services are
   sensitive. Browser pages can make additional requests and follow redirects.
+  Web tools are off by default for new settings, and the composer can toggle
+  them for future turns; enabling them shows a warning. Disabling them also
+  requests shutdown of Cordial's browser session. Existing saved settings keep
+  their web preference. This switch is not a firewall for other applications.
 - **Browser.** The browser runs headless with its own throwaway profile in the
   app-data scratch folder, `--mute-audio --no-first-run`, and is killed when the
   session ends. It is the user's own browser binary: Cordial does not ship one.

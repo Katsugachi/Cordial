@@ -104,4 +104,9 @@ exhausted its budget without a checklist or summary; the expected area was 250,
 perimeter 70, 110 packs and $5280. English exhausted its budget and again treated
 figurative images as missing pictures. The PDF answer again used an incorrect
 cone formula, compared the rod against the base diagonal, and treated the cube's
-diagonal as an edge; its checklist remained 1/3.
+diagonal as an edge; its checklist remained 1/3. In run 42457810071 (seed
+3803104416), architecture gave the independently checked area 522, perimeter 94,
+230 packs and $11040, but its intermediate waste area was wrong, it omitted a
+source URL and its checklist was unfinished. English exhausted its budget. The
+PDF answer said the rod fits but used the wrong cone formula, treated the cube
+diagonal as an edge and left all steps unfinished.

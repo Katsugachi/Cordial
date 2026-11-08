@@ -389,6 +389,11 @@ impl AppState {
         if previous.workspace_dir != settings.workspace_dir {
             guard.policy.clear_grants();
         }
+        if previous.web_enabled && !settings.web_enabled {
+            // Closing the tool list alone would leave an already opened page
+            // running in the background. Stop the browser on opt-out as well.
+            guard.tools.shutdown().await;
+        }
 
         if previous.workspace_dir != settings.workspace_dir || previous.effort != settings.effort {
             let workspace = workspace_for(&guard.paths, &settings);

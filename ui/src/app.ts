@@ -484,6 +484,11 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
       case "attach-pdf":
         attachPdf();
         break;
+      case "toggle-web":
+        if (state.busy) break;
+        if (!state.settings.web_enabled && !window.confirm("Web and browser tools can access local and private network services. Enable web access?")) break;
+        void persistSettings({ ...state.settings, web_enabled: !state.settings.web_enabled });
+        break;
       case "remove-attachment": {
         const index = Number.parseInt(target.dataset.index ?? "", 10);
         if (Number.isFinite(index)) {

@@ -77,6 +77,39 @@ describe("window", () => {
     expect(root.querySelector<HTMLSelectElement>("#effort-select")?.value).toBe("high");
   });
 
+  it("lets the user disable web access and warns before re-enabling it", async () => {
+    const root = await bootApp();
+    const web = () => root.querySelector<HTMLButtonElement>('[data-action="toggle-web"]')!;
+    expect(web().getAttribute("aria-pressed")).toBe("false");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    web().click();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("private network"));
+    expect(web().getAttribute("aria-pressed")).toBe("false");
+    confirm.mockReturnValue(true);
+    web().click();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(web().getAttribute("aria-pressed")).toBe("true");
+    web().click();
+    await vi.advanceTimersByTimeAsync(20);
+    expect(web().getAttribute("aria-pressed")).toBe("false");
+    confirm.mockRestore();
+  });
+
+  it("does not change web access during an active turn", async () => {
+    const root = await bootApp();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    root.querySelector<HTMLTextAreaElement>("#input")!.value = "Hello";
+    root.querySelector<HTMLElement>('[data-action="send"]')!.click();
+    await vi.advanceTimersByTimeAsync(60);
+    const button = root.querySelector<HTMLButtonElement>('[data-action="toggle-web"]')!;
+    expect(button.disabled).toBe(true);
+    button.click();
+    expect(confirm).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(root.querySelector<HTMLButtonElement>('[data-action="toggle-web"]')?.getAttribute("aria-pressed")).toBe("false");
+    confirm.mockRestore();
+  });
+
   it("saves and reopens memory and skills", async () => {
     const root = await bootApp();
     for (const kind of ["memory", "skill"]) {

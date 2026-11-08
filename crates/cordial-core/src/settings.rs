@@ -154,7 +154,7 @@ impl Default for Settings {
             mmproj_path: String::new(),
             workspace_dir: String::new(),
             threads: 0,
-            web_enabled: true,
+            web_enabled: false,
             memory: String::new(),
             skill: String::new(),
         }
@@ -195,6 +195,15 @@ mod tests {
         assert!(Effort::Medium.max_tool_rounds() < Effort::High.max_tool_rounds());
         assert!(Effort::High.max_tool_rounds() < Effort::Task.max_tool_rounds());
         assert!(Effort::Low.max_output_tokens() < Effort::High.max_output_tokens());
+    }
+
+    #[test]
+    fn network_is_off_by_default_but_saved_preferences_are_preserved() {
+        assert!(!Settings::default().web_enabled);
+        let old_enabled: Settings = serde_json::from_str(r#"{"web_enabled":true}"#).unwrap();
+        let old_missing: Settings = serde_json::from_str("{}").unwrap();
+        assert!(old_enabled.web_enabled);
+        assert!(!old_missing.web_enabled);
     }
 
     #[test]

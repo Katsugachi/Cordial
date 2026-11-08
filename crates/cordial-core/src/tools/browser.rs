@@ -435,7 +435,8 @@ impl BrowserSession {
     }
 
     pub async fn shutdown(mut self) {
-        let _ = self.socket.close(None).await;
+        // A stuck websocket must not prevent us from stopping the browser.
+        let _ = tokio::time::timeout(Duration::from_secs(2), self.socket.close(None)).await;
         let _ = self.child.kill().await;
         let _ = self.child.wait().await;
         tokio::fs::remove_dir_all(&self.user_data_dir).await.ok();
@@ -614,6 +615,28 @@ fn which(binary: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn shutdown_terminates_browser_child_and_removes_profile() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let _ = socket.next().await;
+        });
+        let (socket, _) = connect_async(format!("ws://{addr}")).await.unwrap();
+        let child = tokio::process::Command::new("sleep").arg("120").kill_on_drop(true).spawn().unwrap();
+        let pid = child.id().unwrap();
+        let profile = std::env::temp_dir().join(format!("cordial-browser-test-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&profile).await.unwrap();
+        let session = BrowserSession { child, socket, next_id: 1, user_data_dir: profile.clone(), viewport: (1, 1) };
+        tokio::time::timeout(Duration::from_secs(5), session.shutdown()).await.unwrap();
+        server.await.unwrap();
+        assert!(!profile.exists());
+        assert!(!Path::new(&format!("/proc/{pid}")).exists(), "browser child was not reaped");
+    }
 
     #[test]
     fn addresses_are_normalised() {

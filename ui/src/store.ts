@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mmproj_path: "",
   workspace_dir: "",
   threads: 0,
-  web_enabled: true,
+  web_enabled: false,
   memory: "",
   skill: "",
 };
