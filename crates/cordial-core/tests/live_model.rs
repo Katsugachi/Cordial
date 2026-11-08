@@ -223,6 +223,11 @@ impl Live {
             (text, diagnostics)
         });
 
+        let seed = std::env::var("CORDIAL_LIVE_SEED")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(|value| (value % u32::MAX as u64) as u32)
+            .unwrap_or_else(|| SamplingParams::default().seed);
         let config = AgentConfig {
             effort,
             permission_mode: PermissionMode::Auto,
@@ -238,6 +243,7 @@ impl Live {
             keep_image_turns: 2,
             sampling: SamplingParams {
                 temperature: effort.temperature(),
+                seed,
                 ..SamplingParams::default()
             },
         };
@@ -264,7 +270,7 @@ impl Live {
             .unwrap_or_else(|e| format!("error: {e}"));
 
         eprintln!(
-            "EVAL progress turn stop={stop}; diagnostics={:?}",
+            "EVAL progress turn stop={stop}; seed={seed}; diagnostics={:?}",
             self.last_diagnostics
         );
 

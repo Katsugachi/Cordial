@@ -58,7 +58,9 @@ subjects or research tasks. A separate `research_worksheets_architecture_and_eng
 live smoke test exercises web search, opening and citing a source, a generated
 geometry calculation, and literary analysis. It is triggered with `[research]`
 and independently checks selected answers; it is not a comprehensive held-out
-benchmark. In [run 41795514600](https://github.com/Katsugachi/Cordial/actions/runs/41795514600)
+benchmark. The PDF and parallel research CI jobs derive a recorded sampling
+seed from the run ID, so repeated runs cover different model samples rather than
+replaying the same fixed seed. A passing sample would not establish reliability. In [run 41795514600](https://github.com/Katsugachi/Cordial/actions/runs/41795514600)
 the model produced no final answer for either worksheet. The English attempt
 repeated web fetches until its context filled. In the later [run 41798196782](https://github.com/Katsugachi/Cordial/actions/runs/41798196782),
 the architecture answer contained the checked facts and arithmetic but no
