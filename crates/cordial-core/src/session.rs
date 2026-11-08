@@ -375,10 +375,18 @@ mod tests {
         message.tool_status = Some(ToolResultStatus::Failed);
         let value = serde_json::to_value(&message).unwrap();
         assert_eq!(value["tool_status"], "failed");
-        assert_eq!(serde_json::from_value::<Message>(value.clone()).unwrap(), message);
+        assert_eq!(
+            serde_json::from_value::<Message>(value.clone()).unwrap(),
+            message
+        );
         let mut legacy = value;
         legacy.as_object_mut().unwrap().remove("tool_status");
-        assert_eq!(serde_json::from_value::<Message>(legacy).unwrap().tool_status, None);
+        assert_eq!(
+            serde_json::from_value::<Message>(legacy)
+                .unwrap()
+                .tool_status,
+            None
+        );
     }
 
     #[test]

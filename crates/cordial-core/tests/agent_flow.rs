@@ -256,7 +256,10 @@ async fn tool_call_runs_and_feeds_back_into_the_model() {
     assert_eq!(session.messages.len(), 4);
     assert_eq!(session.messages[2].role, Role::Tool);
     assert!(session.messages[2].content.contains("ship on Friday"));
-    assert_eq!(session.messages[2].tool_status, Some(cordial_core::session::ToolResultStatus::Ok));
+    assert_eq!(
+        session.messages[2].tool_status,
+        Some(cordial_core::session::ToolResultStatus::Ok)
+    );
     assert!(events
         .iter()
         .any(|event| matches!(event, AgentEvent::ToolCallFinished { ok: true, .. })));
@@ -315,7 +318,10 @@ async fn denial_is_reported_to_the_model() {
         .find(|m| m.role == Role::Tool)
         .expect("denial recorded as a tool message");
     assert!(tool_message.content.contains("declined"));
-    assert_eq!(tool_message.tool_status, Some(cordial_core::session::ToolResultStatus::Denied));
+    assert_eq!(
+        tool_message.tool_status,
+        Some(cordial_core::session::ToolResultStatus::Denied)
+    );
     assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolMessage { message, .. } if message.tool_status == Some(cordial_core::session::ToolResultStatus::Denied))));
 }
 
@@ -838,7 +844,10 @@ async fn task_bounds_repeated_fetches_without_stopping_early() {
         .unwrap()
         .content
         .contains("not independently verified"));
-    assert!(session.messages.iter().any(|m| m.tool_status == Some(cordial_core::session::ToolResultStatus::Failed)));
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.tool_status == Some(cordial_core::session::ToolResultStatus::Failed)));
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, summary, .. } if name == "web_fetch" && summary != "skipped repeated fetch")).count(), 2);
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { summary, .. } if summary == "skipped repeated fetch")).count(), 2);
 }

@@ -707,7 +707,10 @@ impl<'a> Agent<'a> {
                     "The user declined this tool call. Do not try it again; answer with what you already have or ask what they would prefer.",
                 );
                 result.tool_status = Some(ToolResultStatus::Denied);
-                self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.to_string(), message: result.clone() });
+                self.events.emit(AgentEvent::ToolMessage {
+                    turn_id: turn_id.to_string(),
+                    message: result.clone(),
+                });
                 session.push(result);
                 self.checkpoint(session);
                 return false;
@@ -749,7 +752,11 @@ impl<'a> Agent<'a> {
         });
 
         let mut message = Message::tool_result(call.id.clone(), outcome.text.clone());
-        message.tool_status = Some(if outcome.ok { ToolResultStatus::Ok } else { ToolResultStatus::Failed });
+        message.tool_status = Some(if outcome.ok {
+            ToolResultStatus::Ok
+        } else {
+            ToolResultStatus::Failed
+        });
         message.attachments = outcome
             .media
             .iter()
