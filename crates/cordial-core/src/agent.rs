@@ -528,7 +528,9 @@ impl<'a> Agent<'a> {
                 }
                 let previous_statuses: Vec<_> =
                     session.plan.iter().map(|step| step.status).collect();
-                let ok = self.execute_call(session, &turn_id, call, reconciling_plan).await;
+                let ok = self
+                    .execute_call(session, &turn_id, call, reconciling_plan)
+                    .await;
                 if self.config.effort == Effort::Task {
                     if call.name == "web_search" || call.name == "web_fetch" {
                         research_streak += 1;
@@ -1098,7 +1100,14 @@ fn apply_plan(session: &mut Session, call: &ToolCall, reconciling: bool) -> tool
             note: note.to_string(),
         });
     }
-    if reconciling && (session.plan.len() != steps.len() || session.plan.iter().zip(&steps).any(|(old, new)| old.title != new.title)) {
+    if reconciling
+        && (session.plan.len() != steps.len()
+            || session
+                .plan
+                .iter()
+                .zip(&steps)
+                .any(|(old, new)| old.title != new.title))
+    {
         return tools::ToolOutcome::fail("invalid plan", "Error: during checklist reconciliation, keep every existing step title in the same order. Update statuses and notes without replacing the task.");
     }
     let running = steps

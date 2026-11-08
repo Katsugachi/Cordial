@@ -714,7 +714,9 @@ async fn task_reconciliation_keeps_drafts_unpublished() {
     let Backend::Scripted(scripted) = &backend else {
         panic!("expected scripted backend")
     };
-    assert!(scripted.requests[2].prompt.contains("Review the tool results and the current checklist"));
+    assert!(scripted.requests[2]
+        .prompt
+        .contains("Review the tool results and the current checklist"));
     assert!(scripted.requests[2].prompt.contains("Check work"));
     assert!(!scripted.requests[2].prompt.contains("Draft answer."));
 }
@@ -805,13 +807,27 @@ async fn reconciliation_cannot_replace_or_drop_unfinished_steps() {
     let mut session = Session::new();
     let initial = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Inspect inputs","status":"done"},{"title":"Verify result","status":"running"}]</parameter></function></tool_call>"#;
     let replace = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Example step","status":"done"}]</parameter></function></tool_call>"#;
-    let (result, events) = run_turn(&fixture, vec![initial, "Done.", replace, "Done.", "Done.", "Done."],
-        config(Effort::Task, PermissionMode::Auto), &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![initial, "Done.", replace, "Done.", "Done.", "Done."],
+        config(Effort::Task, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert_eq!(session.plan.len(), 2);
     assert_eq!(session.plan[1].title, "Verify result");
-    assert_eq!(session.plan[1].status, cordial_core::session::PlanStatus::Running);
-    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
+    assert_eq!(
+        session.plan[1].status,
+        cordial_core::session::PlanStatus::Running
+    );
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("Task incomplete"));
     assert!(events.iter().any(|e| matches!(e, AgentEvent::ToolCallFinished { name, ok: false, .. } if name == "update_plan")));
 }
 
