@@ -155,4 +155,11 @@ Wikipedia-only fallback, but the diagnostics did not identify which provider
 answered. Both research worksheets exhausted their tool budgets without
 substantive answers (seed 3831903192). The ordinary Rust, UI, desktop, sandbox
 and inference jobs passed. This single run does not establish whether the
-fallback caused or improved the failures.
+fallback caused or improved the failures. In
+[run 42491867495](https://github.com/Katsugachi/Cordial/actions/runs/42491867495),
+the status explicitly identified Wikipedia-only search results. The research
+evaluation still failed: English exhausted its tool budget, and architecture
+marked its checklist done while giving 2 packs/$96 instead of 238 packs/$11,424
+(seed 3837161840). The ordinary Rust, UI, desktop, sandbox and inference checks
+passed. Search availability does not make model reasoning or progress reports
+reliable.
