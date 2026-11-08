@@ -674,6 +674,29 @@ async fn blocked_steps_are_not_reported_as_task_completion() {
 }
 
 #[tokio::test]
+async fn task_temporarily_pauses_research_to_allow_other_work() {
+    let fixture = Fixture::new("research-pause");
+    let mut session = Session::new();
+    let plan = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"running"}]</parameter></function></tool_call>"#;
+    let fetch1 = r#"<tool_call><function=web_fetch><parameter=url>file://one</parameter></function></tool_call>"#;
+    let fetch2 = r#"<tool_call><function=web_fetch><parameter=url>file://two</parameter></function></tool_call>"#;
+    let fetch3 = r#"<tool_call><function=web_fetch><parameter=url>file://three</parameter></function></tool_call>"#;
+    let fetch4 = r#"<tool_call><function=web_fetch><parameter=url>file://four</parameter></function></tool_call>"#;
+    let fetch5 = r#"<tool_call><function=web_fetch><parameter=url>file://five</parameter></function></tool_call>"#;
+    let fetch6 = r#"<tool_call><function=web_fetch><parameter=url>file://six</parameter></function></tool_call>"#;
+    let read = r#"<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>"#;
+    let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"done"}]</parameter></function></tool_call>"#;
+    let mut cfg = config(Effort::Task, PermissionMode::Auto);
+    cfg.web_enabled = true;
+    let (result, events) = run_turn(&fixture, vec![plan, fetch1, fetch2, fetch3, fetch4, fetch5, read, fetch6, done, "The notes say Friday."], cfg, &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(session.messages.iter().any(|m| m.content.contains("Research is paused for this generation")));
+    assert!(session.messages.iter().any(|m| m.content.contains("The plan is to ship on Friday")));
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")).count(), 5);
+    assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Pausing repeated research"))));
+}
+
+#[tokio::test]
 async fn task_bounds_repeated_fetches_without_stopping_early() {
     let fixture = Fixture::new("failed-fetch-loop");
     let mut session = Session::new();

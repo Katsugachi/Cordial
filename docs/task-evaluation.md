@@ -87,4 +87,10 @@ errors persisted; the architecture flooring calculation was again wrong and its
 checklist absent. In run 42436304967, the English task correctly identified
 personification but did not compare the literary images or cite its source; the
 architecture attempt again stopped after repeated fetches. Both checklists were
-unfinished. These results remain failures even though some tools succeeded.
+unfinished. In run 42443033762 (seed 3788328107), the revised per-source guard
+let architecture continue but it exhausted its budget on other fetches before
+summarizing; the expected area was 399, perimeter 80, 176 packs and $8448.
+English again mistook figurative images for missing pictures, omitted its source
+URL and left the checklist unfinished. The PDF run again used Python but gave
+245.04 cm², said the rod would not fit, and gave 512 cm³; its checklist was
+1/3. These results remain failures even though some tools succeeded.
