@@ -183,4 +183,10 @@ them. Architecture's arithmetic was correct but its checklist was unfinished;
 English exhausted the tool budget (seed 3872303808). Both real-model jobs failed,
 while ordinary jobs passed. The longer research-pause experiment was removed:
 it did not demonstrate improvement and would constrain legitimate research.
-Different seeds prevent a controlled causal comparison.
+Different seeds prevent a controlled causal comparison. In the next full-page
+[run 42530172915](https://github.com/Katsugachi/Cordial/actions/runs/42530172915),
+the ordinary jobs passed but both real-model jobs failed. At seed 3875467260,
+the PDF gave the correct cone and rod answers but treated the cube's diagonal as
+a side and returned 512 cm³; its checklist was 0/3. Successful Python output
+contained 75.40, 47.17 and 512, not the correct cube volume. Both research
+worksheets exhausted their tool budgets without substantive answers.
