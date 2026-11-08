@@ -28,19 +28,34 @@ use cordial_llama::SamplingParams;
 // Numeric token parsing for evaluation only. Whole tokens avoid accepting 161
 // merely because an answer contains 1610, while grouped currency is accepted.
 fn numeric_tokens(text: &str) -> Vec<f64> {
-    let regex = regex::Regex::new(r"[+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?").unwrap();
-    regex.find_iter(text).filter_map(|m| {
-        let before = text[..m.start()].chars().next_back();
-        let after = text[m.end()..].chars().next();
-        let before_prefix = &text[..m.start()];
-        let after_suffix = &text[m.end()..];
-        let joins_previous_number = before.is_some_and(|c| c.is_ascii_digit())
-            || (matches!(before, Some(',' | '.')) && before_prefix.chars().rev().nth(1).is_some_and(|c| c.is_ascii_digit()));
-        let joins_next_number = after.is_some_and(|c| c.is_ascii_digit())
-            || (matches!(after, Some(',' | '.')) && after_suffix.chars().nth(1).is_some_and(|c| c.is_ascii_digit()));
-        if joins_previous_number || joins_next_number { return None; }
-        m.as_str().replace(',', "").parse::<f64>().ok()
-    }).collect()
+    let regex =
+        regex::Regex::new(r"[+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?").unwrap();
+    regex
+        .find_iter(text)
+        .filter_map(|m| {
+            let before = text[..m.start()].chars().next_back();
+            let after = text[m.end()..].chars().next();
+            let before_prefix = &text[..m.start()];
+            let after_suffix = &text[m.end()..];
+            let joins_previous_number = before.is_some_and(|c| c.is_ascii_digit())
+                || (matches!(before, Some(',' | '.'))
+                    && before_prefix
+                        .chars()
+                        .rev()
+                        .nth(1)
+                        .is_some_and(|c| c.is_ascii_digit()));
+            let joins_next_number = after.is_some_and(|c| c.is_ascii_digit())
+                || (matches!(after, Some(',' | '.'))
+                    && after_suffix
+                        .chars()
+                        .nth(1)
+                        .is_some_and(|c| c.is_ascii_digit()));
+            if joins_previous_number || joins_next_number {
+                return None;
+            }
+            m.as_str().replace(',', "").parse::<f64>().ok()
+        })
+        .collect()
 }
 
 #[test]
@@ -729,12 +744,27 @@ async fn rendered_pdf_worksheet_end_to_end() {
     // A successful but unrelated calculation is not evidence that the
     // worksheet calculations were run. Require the three independently
     // computed values in successful Python outputs, with rounding tolerance.
-    let python_values: Vec<f64> = session.messages.iter()
+    let python_values: Vec<f64> = session
+        .messages
+        .iter()
         .filter(|message| message.tool_status == Some(cordial_core::session::ToolResultStatus::Ok))
-        .filter(|message| session.messages.iter().flat_map(|m| &m.tool_calls).any(|call|
-            call.name == "python_calculate" && message.tool_call_id.as_deref() == Some(call.id.as_str())))
-        .flat_map(|message| numeric_tokens(&message.content)).collect();
-    for (expected, tolerance) in [(75.39822368615503, 0.005), (47.16990566028302, 0.005), (98.53444594169618, 0.0005)] {
+        .filter(|message| {
+            session
+                .messages
+                .iter()
+                .flat_map(|m| &m.tool_calls)
+                .any(|call| {
+                    call.name == "python_calculate"
+                        && message.tool_call_id.as_deref() == Some(call.id.as_str())
+                })
+        })
+        .flat_map(|message| numeric_tokens(&message.content))
+        .collect();
+    for (expected, tolerance) in [
+        (75.39822368615503, 0.005),
+        (47.16990566028302, 0.005),
+        (98.53444594169618, 0.0005),
+    ] {
         assert!(python_values.iter().any(|actual| (actual - expected).abs() < tolerance),
             "successful Python output did not contain independently expected value {expected}: {python_values:?}");
     }
