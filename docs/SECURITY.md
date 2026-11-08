@@ -30,7 +30,8 @@ clears remembered grants.
   traversal and rejects existing symlink components. These checks are path-based,
   not an OS sandbox: another local process changing paths concurrently can race
   them. Use a trusted workspace and do not treat this as isolation from a
-  malicious local user. Reads are capped at 1.5 MB and
+  malicious local user. The agent executes at most one tool call from each model
+  response; additional calls receive a not-executed result. Reads are capped at 1.5 MB and
   rejected when the first 8 KB look binary.
 - **Network.** Direct tool URLs must use `http` or `https`, and HTTP redirects
   are limited to 8 hops. This is not network isolation: URLs, redirects, DNS,

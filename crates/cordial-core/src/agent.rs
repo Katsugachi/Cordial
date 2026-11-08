@@ -219,6 +219,9 @@ impl<'a> Agent<'a> {
         let mut retried_without_thinking = false;
         let mut repaired_tool_call = false;
         let mut retry_instruction = "";
+        // Retain a bounded, unverified candidate only as temporary model
+        // context while reconciling the checklist; never publish it as final.
+        let mut task_draft: Option<String> = None;
         let mut plan_nudges = 0u32;
         let mut planning_attempts = 0u32;
         let mut reconcile_next = false;
@@ -262,7 +265,16 @@ impl<'a> Agent<'a> {
             reconcile_next = false;
             suppress_plan_next = false;
             suppress_research_next = false;
-            let output = match self
+            // Keep the model's unverified draft in its own assistant-role
+            // context, not in the system prompt or durable transcript. This
+            // lets it reconcile progress against the actual work it just wrote.
+            let draft_id = task_draft.as_ref().map(|draft| {
+                let message = Message::assistant(format!("Unverified working draft, not a final answer:\n{draft}"), None, vec![]);
+                let id = message.id.clone();
+                session.messages.push(message);
+                id
+            });
+            let generated = self
                 .generate_with_retry(
                     session,
                     &turn_id,
@@ -271,8 +283,11 @@ impl<'a> Agent<'a> {
                     thinking,
                     &mut tool_context,
                 )
-                .await
-            {
+                .await;
+            if let Some(id) = draft_id {
+                session.messages.retain(|message| message.id != id);
+            }
+            let output = match generated {
                 Ok(output) => output,
                 Err(err) => {
                     self.events.emit(AgentEvent::Error {
@@ -377,10 +392,13 @@ impl<'a> Agent<'a> {
                 {
                     plan_nudges += 1;
                     reconcile_next = !session.plan.is_empty();
+                    if reconcile_next && !parsed.content.trim().is_empty() {
+                        task_draft = Some(truncate_chars(parsed.content.trim(), 4_000));
+                    }
                     retry_instruction = if session.plan.is_empty() {
                         "First create a checklist using this exact tool format, changing the titles to fit the request: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet."
                     } else {
-                        "Review the tool results and the current checklist. Call update_plan now with every checklist step and its current status. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
+                        "Review the tool results, the unverified working draft if present, and the current checklist. The draft is not proof of correctness. Call update_plan now with every checklist step and its current status. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
                     };
                     self.events.emit(AgentEvent::GenerationReset {
                         turn_id: turn_id.clone(),
@@ -450,6 +468,11 @@ impl<'a> Agent<'a> {
                 .map(|(index, call)| call.into_call(format!("{turn_id}-{rounds}-{index}")))
                 .collect();
 
+            if calls.iter().any(|call| call.name != "update_plan") {
+                // New work can invalidate the earlier draft.
+                task_draft = None;
+            }
+
             if let Some(reason) = parsed.malformed {
                 self.events.emit(AgentEvent::Notice {
                     message: format!("The model produced a malformed tool call ({reason})."),
@@ -465,7 +488,20 @@ impl<'a> Agent<'a> {
             session.push(assistant);
             self.checkpoint(session);
 
-            for call in &calls {
+            for (index, call) in calls.iter().enumerate() {
+                if index > 0 {
+                    // The model is instructed to issue one call at a time. Do
+                    // not execute a batch of unreviewed actions after a single
+                    // generation, even if it ignores that instruction.
+                    let detail = "Only one tool call may run per response. This call was not executed; review the first result before requesting another action.";
+                    let mut result = Message::tool_result(call.id.clone(), detail);
+                    result.tool_status = Some(ToolResultStatus::Failed);
+                    self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.clone(), message: result.clone() });
+                    session.push(result);
+                    self.checkpoint(session);
+                    retry_instruction = "Issue one tool call at a time and wait for its result before requesting another action.";
+                    continue;
+                }
                 if !tools_for_prompt.iter().any(|tool| tool.name == call.name) {
                     let message = if research_paused
                         && (call.name == "web_search" || call.name == "web_fetch")

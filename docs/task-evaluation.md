@@ -56,6 +56,12 @@ The image-token capacity probe passed before these worksheet attempts. A
 page regions, with a larger test context and the same seed as run 42447192434.
 It is an evaluation-only variant, not a change to desktop PDF attachments;
 a successful sample would not establish general visual or mathematical accuracy.
+In [run 42463152563](https://github.com/Katsugachi/Cordial/actions/runs/42463152563),
+the model supplied all three independently checked answers and explanations and
+used Python without leaving scripts. Its checklist remained 0/3, so the full
+end-to-end test failed. The earlier full-page run with the same seed gave all
+three answers incorrectly. The experiment also changed context size and prompt,
+so it does not isolate the effect of cropping.
 The isolated runtime passed its Linux security tests,
 but it is not enabled in default desktop builds. PDF diagrams require visual rendering,
 not text extraction alone.
