@@ -19,7 +19,10 @@ combination deserves a written threat model rather than good intentions.
 | unknown tool | — | Treated as a write, asks first |
 
 `PermissionMode::Manual` asks before every call. `PermissionMode::Auto` asks only
-for writes, and remembers a grant for the rest of the session.
+for writes and remembers a grant for that tool for the active conversation.
+Subsequent calls to that tool, including writes to other paths, do not receive
+individual approvals. Changing conversations, permission mode or working folder
+clears remembered grants.
 
 ## Boundaries that are enforced, not suggested
 
@@ -65,14 +68,17 @@ instructions…"). Cordial cannot make a 2B model immune to this, so the design
 limits the blast radius instead:
 
 1. Tool results are labelled (`<tool_response>`) and untrusted by construction.
-2. Anything that writes needs explicit approval, in both permission modes.
+2. Manual mode asks for each write. In auto mode, the first write by each tool
+   requires approval; later writes by that tool in the active conversation do
+   not. An approval is not limited to the displayed path or content.
 3. File tools are restricted to the chosen workspace, subject to the filesystem
    race limitation above. Users can select a broader folder, including their home.
 4. The system prompt tells the model that page content is data, not instructions.
 
-A reviewer should treat "the model reads a hostile page and asks to write a file"
-as the interesting case: it produces an approval card, and the approval card shows
-the exact path and preview.
+A hostile page may steer a model toward a write. The first such call prompts for
+approval in auto mode, but a previous grant can allow later calls without a new
+prompt. The approval card shows a truncated preview, not necessarily the full
+path or content. Use manual mode and a trusted workspace for sensitive work.
 
 ## Data on disk
 

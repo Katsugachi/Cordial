@@ -41,6 +41,9 @@ impl PermissionPolicy {
     }
 
     pub fn set_mode(&mut self, mode: PermissionMode) {
+        if self.mode != mode {
+            self.clear_grants();
+        }
         self.mode = mode;
     }
 
@@ -69,11 +72,9 @@ impl PermissionPolicy {
             .map(|spec| spec.risk)
             .unwrap_or(Risk::Write);
 
-        if self.grants.contains(&call.name) {
-            return Permission::Allow;
-        }
         match self.mode {
             PermissionMode::Manual => Permission::Ask { risk },
+            PermissionMode::Auto if self.grants.contains(&call.name) => Permission::Allow,
             PermissionMode::Auto => match risk {
                 Risk::Write => Permission::Ask { risk },
                 Risk::Read | Risk::Network | Risk::Compute => Permission::Allow,
@@ -159,14 +160,15 @@ mod tests {
     }
 
     #[test]
-    fn switching_to_manual_keeps_existing_grants() {
+    fn manual_mode_and_mode_changes_do_not_reuse_auto_grants() {
         let mut policy = PermissionPolicy::new(PermissionMode::Auto);
-        policy.grant("read_file");
+        policy.grant("write_file");
         policy.set_mode(PermissionMode::Manual);
-        assert_eq!(policy.evaluate(&call("read_file")), Permission::Allow);
-        assert!(matches!(
-            policy.evaluate(&call("list_files")),
-            Permission::Ask { .. }
-        ));
+        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
+        // Even an explicit grant cannot bypass manual mode.
+        policy.grant("write_file");
+        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
+        policy.set_mode(PermissionMode::Auto);
+        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
     }
 }

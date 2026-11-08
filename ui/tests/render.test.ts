@@ -138,6 +138,10 @@ describe("chat view", () => {
     expect(html).toContain('data-action="approve"');
     expect(html).toContain('data-allow="false"');
     expect(html).toContain("writes local files");
+    expect(html).toContain("current conversation, including later actions");
+    const manual = chatHtml({ ...state, settings: { ...state.settings, permission_mode: "manual" } });
+    expect(manual).toContain("only to this action");
+    expect(manual).not.toContain("including later actions");
   });
 });
 

@@ -60,7 +60,15 @@ pub struct Core {
     pub policy: PermissionPolicy,
     pub engine: Option<Engine>,
     pub model_load_error: Option<String>,
+    permission_session_id: Option<String>,
     python_path: Option<PathBuf>,
+}
+
+fn select_permission_session(policy: &mut PermissionPolicy, current: &mut Option<String>, session_id: &str) {
+    if current.as_deref() != Some(session_id) {
+        policy.clear_grants();
+        *current = Some(session_id.to_string());
+    }
 }
 
 fn create_tools(
@@ -107,6 +115,7 @@ impl Core {
             tools: Arc::new(tools),
             engine: None,
             model_load_error: None,
+            permission_session_id: None,
             python_path,
             paths,
         })
@@ -286,6 +295,7 @@ impl AppState {
             engine,
             tools,
             policy,
+            permission_session_id,
             store,
             settings,
             ..
@@ -294,6 +304,7 @@ impl AppState {
         let Some(engine) = engine.as_mut() else {
             return Err("The model is not ready yet. Wait for it to finish loading.".to_string());
         };
+        select_permission_session(policy, permission_session_id, &session_id);
 
         let mut session = store.load(&session_id).unwrap_or_else(|_| {
             let mut session = Session::new();
@@ -375,6 +386,9 @@ impl AppState {
         write_settings(&guard.paths, &settings).map_err(|err| err.to_string())?;
         guard.settings = settings.clone();
         guard.policy.set_mode(settings.permission_mode);
+        if previous.workspace_dir != settings.workspace_dir {
+            guard.policy.clear_grants();
+        }
 
         if previous.workspace_dir != settings.workspace_dir || previous.effort != settings.effort {
             let workspace = workspace_for(&guard.paths, &settings);
@@ -570,6 +584,23 @@ mod tests {
         assert!(first.has_python_sandbox() && updated.has_python_sandbox());
         assert!(!missing.has_python_sandbox());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn auto_grants_are_not_shared_between_conversations() {
+        use cordial_core::settings::PermissionMode;
+        let mut policy = PermissionPolicy::new(PermissionMode::Auto);
+        let mut current = None;
+        select_permission_session(&mut policy, &mut current, "first");
+        policy.grant("write_file");
+        select_permission_session(&mut policy, &mut current, "first");
+        assert!(policy.is_granted("write_file"));
+        select_permission_session(&mut policy, &mut current, "second");
+        assert!(!policy.is_granted("write_file"));
+        policy.grant("docx_edit");
+        select_permission_session(&mut policy, &mut current, "first");
+        assert!(!policy.is_granted("docx_edit"));
+        assert!(!policy.is_granted("write_file"));
     }
 
     #[test]

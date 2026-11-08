@@ -160,7 +160,7 @@ export function chatHtml(state: AppState): string {
   }
 
   if (state.approval) {
-    blocks.push(approvalHtml(state.approval));
+    blocks.push(approvalHtml(state.approval, state.settings.permission_mode));
   }
 
   if (blocks.length === 0) {
@@ -199,13 +199,16 @@ function planCard(steps: PlanStep[]): string {
   return `<section class="plan" aria-label="Task checklist"><div class="plan__head"><span>Task checklist</span><span>${done}/${steps.length}</span></div><ol class="plan__steps">${rows}</ol></section>`;
 }
 
-function approvalHtml(tool: ToolView): string {
+function approvalHtml(tool: ToolView, mode: AppState["settings"]["permission_mode"]): string {
+  const scope = mode === "auto"
+    ? "Allowing grants this tool for the current conversation, including later actions."
+    : "Allowing applies only to this action.";
   return `<div class="approval" role="group" aria-label="Tool approval">
     <div class="approval__text">
       Allow <strong>${escapeHtml(toolLabel(tool.name))}</strong>?
       <span class="approval__risk">${escapeHtml(tool.risk || "This changes local files.")} · ${escapeHtml(
         excerpt(tool.preview, 120),
-      )}</span>
+      )}<br>${escapeHtml(scope)}</span>
     </div>
     <div class="approval__actions">
       <button class="outline-button" data-action="approve" data-call="${escapeHtml(tool.id)}" data-allow="false">Deny</button>
