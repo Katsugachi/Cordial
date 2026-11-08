@@ -149,3 +149,10 @@ ordinary Rust, UI, desktop, sandbox and inference checks passed. At research see
 3827455811, architecture's numerical results matched the independent checker
 but it had no checklist and made an invalid comparison between area and
 perimeter; English exhausted its tool budget. Both real-model jobs failed.
+In [run 42486608847](https://github.com/Katsugachi/Cordial/actions/runs/42486608847),
+search calls returned both results and empty results after adding a
+Wikipedia-only fallback, but the diagnostics did not identify which provider
+answered. Both research worksheets exhausted their tool budgets without
+substantive answers (seed 3831903192). The ordinary Rust, UI, desktop, sandbox
+and inference jobs passed. This single run does not establish whether the
+fallback caused or improved the failures.

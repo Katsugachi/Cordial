@@ -65,7 +65,7 @@ pub async fn search(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
 
     match run_search(runtime, query).await {
         Ok((hits, wikipedia_only)) if hits.is_empty() => ToolOutcome::ok(
-            format!("no results for “{query}”"),
+            format!("no {}results for “{query}”", if wikipedia_only { "Wikipedia " } else { "" }),
             format!(
                 "{}No results for “{query}”. Try different keywords, or use `web_fetch` with a direct link if you already know one.",
                 if wikipedia_only { "DuckDuckGo was unavailable; Wikipedia-only fallback: " } else { "" }
@@ -90,7 +90,7 @@ pub async fn search(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
             text.push_str(
                 "\nOpen a result with `web_fetch` or `browser_open` when you need the details.",
             );
-            ToolOutcome::ok(format!("{} results for “{query}”", limit), text)
+            ToolOutcome::ok(format!("{} {}results for “{query}”", limit, if wikipedia_only { "Wikipedia " } else { "" }), text)
         }
         Err(err) => ToolOutcome::fail(
             "search unavailable",
