@@ -88,6 +88,11 @@ def main() -> None:
                       f"CI/{job_name}: fork PRs must not reach Instabox")
             check(jobs["live-model"]["permissions"]["contents"] == "write",
                   "CI/live-model: transcript publication needs its scoped write grant")
+            pdf_step = next(step for step in jobs["live-model"]["steps"]
+                            if step.get("name") == "Evaluate supplied worksheet with the real model")
+            seed = pdf_step["env"]["CORDIAL_LIVE_SEED"]
+            check("[pdf-random]" in seed and "github.run_id" in seed and "3792486779" in seed,
+                  "CI/live-model: PDF evaluation must support both fixed and varied seeds")
         elif name == "format.yml":
             check(events(workflow) == {"push", "workflow_dispatch"},
                   "Format: only trusted push/dispatch events are allowed")

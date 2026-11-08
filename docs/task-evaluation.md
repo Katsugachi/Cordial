@@ -173,7 +173,9 @@ pages support the claims or that the interpretation is correct.
 In [run 42522006604](https://github.com/Katsugachi/Cordial/actions/runs/42522006604),
 the ordinary jobs passed. The crop experiment again returned all three correct
 PDF answers but failed with an unfinished checklist; both research worksheets
-exhausted the tool budget without substantive answers (seed 3867300949).
+exhausted the tool budget without substantive answers (seed 3867300949). The
+`[pdf-random]` marker can vary the crop experiment's seed instead of reusing
+the fixed comparison seed; crops remain evaluation-only.
 [Run 42527009463](https://github.com/Katsugachi/Cordial/actions/runs/42527009463)
 tested the ordinary full-page PDF path and a three-generation research pause.
 The PDF gave 94.25 cm², rejected the rod despite calculating 47.17 cm, and

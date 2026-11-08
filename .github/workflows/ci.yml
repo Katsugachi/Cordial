@@ -235,8 +235,9 @@ jobs:
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
           CORDIAL_PDF_CROP_PREFIX: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && format('{0}/worksheet-region', runner.temp) || '' }}
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
-          # Match the earlier full-page run for a controlled comparison.
-          CORDIAL_LIVE_SEED: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && '3792486779' || github.run_id }}
+          # Keep the earlier comparison seed unless an explicit varied-seed
+          # crop experiment is requested. Full-page runs use the run ID.
+          CORDIAL_LIVE_SEED: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && !contains(github.event.head_commit.message, '[pdf-random]') && '3792486779' || github.run_id }}
         run: |
           set -o pipefail
           cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
