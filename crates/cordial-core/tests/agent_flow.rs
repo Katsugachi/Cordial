@@ -140,25 +140,50 @@ async fn interrupted_tool_checkpoint_is_closed_without_replaying_writes() {
     let store = SessionStore::new(fixture.scratch.join("sessions"));
     let mut session = Session::new();
     session.push(Message::user("Do work", vec![]));
-    let call = |id: &str| ToolCall { id: id.into(), name: "write_file".into(), arguments: vec![
-        ToolArgument { name: "path".into(), value: "should-not-be-created.txt".into() }
-    ] };
-    session.push(Message::assistant("", None, vec![call("first"), call("second")]));
+    let call = |id: &str| ToolCall {
+        id: id.into(),
+        name: "write_file".into(),
+        arguments: vec![ToolArgument {
+            name: "path".into(),
+            value: "should-not-be-created.txt".into(),
+        }],
+    };
+    session.push(Message::assistant(
+        "",
+        None,
+        vec![call("first"), call("second")],
+    ));
     session.push(Message::tool_result("first", "First call completed."));
     store.save(&session).unwrap();
     let mut session = store.load(&session.id).unwrap();
     let runtime = fixture.runtime(Effort::Low);
-    let mut backend = Backend::Scripted(ScriptedBackend::new(vec!["Please check the interrupted action."]));
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![
+        "Please check the interrupted action.",
+    ]));
     let gate = ApprovalGate::new();
     let mut policy = PermissionPolicy::new(PermissionMode::Auto);
     let (sink, mut receiver) = EventSink::channel();
-    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
-        events: &sink, config: config(Effort::Low, PermissionMode::Auto), store: Some(&store) };
-    agent.run(&mut session, "Continue".into(), vec![]).await.unwrap();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Low, PermissionMode::Auto),
+        store: Some(&store),
+    };
+    agent
+        .run(&mut session, "Continue".into(), vec![])
+        .await
+        .unwrap();
     drop(agent);
     drop(sink);
     let saved = store.load(&session.id).unwrap();
-    let results: Vec<_> = saved.messages.iter().filter(|m| m.role == Role::Tool).collect();
+    let results: Vec<_> = saved
+        .messages
+        .iter()
+        .filter(|m| m.role == Role::Tool)
+        .collect();
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].content, "First call completed.");
     assert_eq!(results[1].tool_call_id.as_deref(), Some("second"));
@@ -167,7 +192,9 @@ async fn interrupted_tool_checkpoint_is_closed_without_replaying_writes() {
     let mut recovered = 0;
     while let Some(event) = receiver.recv().await {
         match event {
-            AgentEvent::Notice { message } if message.contains("outcome is unknown") => recovered += 1,
+            AgentEvent::Notice { message } if message.contains("outcome is unknown") => {
+                recovered += 1
+            }
             AgentEvent::ToolCallStarted { .. } => panic!("interrupted tool was replayed"),
             _ => {}
         }

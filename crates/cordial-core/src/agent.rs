@@ -21,7 +21,8 @@ use crate::permissions::{Permission, PermissionPolicy};
 use crate::prompt::{self, PromptOptions, DEFAULT_MEDIA_MARKER};
 use crate::protocol::parse_reply;
 use crate::session::{
-    Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Role, Session, SessionStore, ToolCall,
+    Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Role, Session, SessionStore,
+    ToolCall,
 };
 use crate::settings::{Effort, PermissionMode, Settings};
 use crate::tools::{self, ToolRuntime, ToolSpec};
@@ -967,7 +968,11 @@ impl<'a> Agent<'a> {
 }
 
 fn recover_interrupted_calls(session: &Session) -> Vec<Message> {
-    let Some(index) = session.messages.iter().rposition(|message| message.role != Role::Tool) else {
+    let Some(index) = session
+        .messages
+        .iter()
+        .rposition(|message| message.role != Role::Tool)
+    else {
         return vec![];
     };
     let assistant = &session.messages[index];
