@@ -682,19 +682,41 @@ async fn task_reconciliation_shows_call_format_and_keeps_drafts_unpublished() {
     let runtime = fixture.runtime(Effort::Task);
     let initial = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Check work","status":"running"}]</parameter></function></tool_call>"#;
     let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Check work","status":"done"}]</parameter></function></tool_call>"#;
-    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![initial, "Draft answer.", done, "Final answer."]));
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![
+        initial,
+        "Draft answer.",
+        done,
+        "Final answer.",
+    ]));
     let gate = ApprovalGate::new();
     let mut policy = PermissionPolicy::new(PermissionMode::Auto);
     let (sink, _receiver) = EventSink::channel();
     let mut session = Session::new();
-    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
-        events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
-    let result = agent.run(&mut session, "Complete this task".into(), vec![]).await.unwrap();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Task, PermissionMode::Auto),
+        store: None,
+    };
+    let result = agent
+        .run(&mut session, "Complete this task".into(), vec![])
+        .await
+        .unwrap();
     drop(agent);
     assert_eq!(result.stop, StopReason::Answered);
-    assert!(!session.messages.iter().any(|message| message.content == "Draft answer."));
-    let Backend::Scripted(scripted) = &backend else { panic!("expected scripted backend") };
-    assert!(scripted.requests[2].prompt.contains("Format example: <tool_call><function=update_plan>"));
+    assert!(!session
+        .messages
+        .iter()
+        .any(|message| message.content == "Draft answer."));
+    let Backend::Scripted(scripted) = &backend else {
+        panic!("expected scripted backend")
+    };
+    assert!(scripted.requests[2]
+        .prompt
+        .contains("Format example: <tool_call><function=update_plan>"));
     assert!(scripted.requests[2].prompt.contains("Check work"));
     assert!(!scripted.requests[2].prompt.contains("Draft answer."));
 }
