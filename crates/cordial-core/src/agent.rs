@@ -73,7 +73,10 @@ impl AgentConfig {
 fn fetch_key(raw: &str) -> String {
     let raw = raw.trim();
     match url::Url::parse(raw) {
-        Ok(mut url) => { url.set_fragment(None); url.to_string() }
+        Ok(mut url) => {
+            url.set_fragment(None);
+            url.to_string()
+        }
         Err(_) => raw.to_string(),
     }
 }
@@ -450,12 +453,19 @@ impl<'a> Agent<'a> {
                     if repeated_fetches.get(&key).copied().unwrap_or(0) >= 2 {
                         let detail = "This source was already fetched twice in this task. Use its earlier results or choose a different source; continue the remaining work.";
                         self.events.emit(AgentEvent::ToolCallFinished {
-                            turn_id: turn_id.clone(), call_id: call.id.clone(), name: call.name.clone(),
-                            ok: false, summary: "skipped repeated fetch".to_string(),
-                            detail: detail.to_string(), thumbnail: None,
+                            turn_id: turn_id.clone(),
+                            call_id: call.id.clone(),
+                            name: call.name.clone(),
+                            ok: false,
+                            summary: "skipped repeated fetch".to_string(),
+                            detail: detail.to_string(),
+                            thumbnail: None,
                         });
                         let result = Message::tool_result(call.id.clone(), detail);
-                        self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.clone(), message: result.clone() });
+                        self.events.emit(AgentEvent::ToolMessage {
+                            turn_id: turn_id.clone(),
+                            message: result.clone(),
+                        });
                         session.push(result);
                         self.checkpoint(session);
                         retry_instruction = "Do not refetch that source. Use earlier evidence, try a different source if needed, and continue the remaining task.";
@@ -494,7 +504,8 @@ impl<'a> Agent<'a> {
                     if *count == 2 {
                         retry_instruction = "The same source was fetched twice. Use the results already obtained, work on the remaining questions, or choose a different source if needed.";
                         self.events.emit(AgentEvent::Notice {
-                            message: "Avoiding a repeated source fetch; continuing the task.".to_string(),
+                            message: "Avoiding a repeated source fetch; continuing the task."
+                                .to_string(),
                         });
                     }
                 }
@@ -1032,8 +1043,14 @@ mod context_compaction_tests {
 
     #[test]
     fn fetch_guard_normalizes_fragments_without_collapsing_queries() {
-        assert_eq!(fetch_key("https://EXAMPLE.com/page#first"), fetch_key("https://example.com/page#second"));
-        assert_ne!(fetch_key("https://example.com/page?q=one"), fetch_key("https://example.com/page?q=two"));
+        assert_eq!(
+            fetch_key("https://EXAMPLE.com/page#first"),
+            fetch_key("https://example.com/page#second")
+        );
+        assert_ne!(
+            fetch_key("https://example.com/page?q=one"),
+            fetch_key("https://example.com/page?q=two")
+        );
     }
 
     #[tokio::test]

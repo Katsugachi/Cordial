@@ -684,14 +684,26 @@ async fn task_bounds_repeated_fetches_without_stopping_early() {
     cfg.max_tool_rounds = 5;
     let (result, events) = run_turn(
         &fixture,
-        vec![plan, fetch, fetch, fetch, fetch, "I could not complete the research."],
+        vec![
+            plan,
+            fetch,
+            fetch,
+            fetch,
+            fetch,
+            "I could not complete the research.",
+        ],
         cfg,
         &mut session,
         None,
     )
     .await;
     assert_eq!(result.stop, StopReason::ToolBudget);
-    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("Task incomplete"));
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, summary, .. } if name == "web_fetch" && summary != "skipped repeated fetch")).count(), 2);
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { summary, .. } if summary == "skipped repeated fetch")).count(), 2);
 }
@@ -959,7 +971,15 @@ async fn repeated_fetch_nudges_task_to_work_before_aborting() {
     cfg.web_enabled = true;
     let (result, events) = run_turn(
         &fixture,
-        vec![plan, fetch, fetch, fetch, read, done, "The notes say Friday."],
+        vec![
+            plan,
+            fetch,
+            fetch,
+            fetch,
+            read,
+            done,
+            "The notes say Friday.",
+        ],
         cfg,
         &mut session,
         None,

@@ -115,7 +115,9 @@ fn persist_pages(directory: &Path, prepared: &mut [Prepared]) -> Result<(), Stri
                     .create_new(true)
                     .open(&file)
                     .map_err(|err| format!("Cannot save PDF page: {err}"))?;
-                handle.write_all(bytes).map_err(|err| format!("Cannot save PDF page: {err}"))?;
+                handle
+                    .write_all(bytes)
+                    .map_err(|err| format!("Cannot save PDF page: {err}"))?;
                 item.attachment.path = file.to_string_lossy().into_owned();
             }
         }
@@ -267,12 +269,17 @@ mod tests {
 
     #[test]
     fn failed_page_write_removes_partial_attachments() {
-        let directory = std::env::temp_dir().join(format!("cordial-pdf-partial-{}", uuid::Uuid::new_v4()));
+        let directory =
+            std::env::temp_dir().join(format!("cordial-pdf-partial-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&directory).unwrap();
         // Make the second create_new fail after the first page is written.
         fs::write(directory.join("page-1.txt"), "collision").unwrap();
         let make_page = || Prepared {
-            attachment: Attachment { kind: AttachmentKind::Text, name: "page".into(), path: "inline:test".into() },
+            attachment: Attachment {
+                kind: AttachmentKind::Text,
+                name: "page".into(),
+                path: "inline:test".into(),
+            },
             bytes: Some(b"private page data".to_vec()),
             extension: "txt",
         };
