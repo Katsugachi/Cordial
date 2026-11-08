@@ -13,7 +13,8 @@ projector (203 MB), and from then on the network is used only when the agent
 searches or browses for you.  <br><br>
 The X post from LiquidAI said it was almost as capable as GPT 5.6 Luna and i guess if it's stable enough to be in Cordial that's good. <br><br>
 Web access is off for new settings. Use **Web off** in the composer to enable
-search and browsing after reviewing the warning. Existing saved preferences are
+search and browsing after reviewing the warning. Search queries go to DuckDuckGo
+and, if that fails, may also go to Wikipedia. Existing saved preferences are
 preserved. Web tools are not network-isolated and can reach local or private
 services; see [Security](docs/SECURITY.md). Search may also be unavailable on
 restricted networks.

@@ -2,8 +2,8 @@
 //!
 //! Search uses DuckDuckGo's HTML endpoints, which need no API key and therefore
 //! keep Cordial fully local and free to run. The parser is defensive: search
-//! engines change markup and rate-limit aggressively, so every failure turns into
-//! a sentence the model can act on rather than an exception.
+//! engines change markup and rate-limit aggressively. If both DuckDuckGo
+//! endpoints fail, a clearly labelled Wikipedia-only search is attempted.
 
 use std::collections::HashSet;
 
@@ -64,16 +64,20 @@ pub async fn search(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     };
 
     match run_search(runtime, query).await {
-        Ok(hits) if hits.is_empty() => ToolOutcome::ok(
+        Ok((hits, wikipedia_only)) if hits.is_empty() => ToolOutcome::ok(
             format!("no results for “{query}”"),
             format!(
-                "No results for “{query}”. Try different keywords, or use `web_fetch` with a \
-                 direct link if you already know one."
+                "{}No results for “{query}”. Try different keywords, or use `web_fetch` with a direct link if you already know one.",
+                if wikipedia_only { "DuckDuckGo was unavailable; Wikipedia-only fallback: " } else { "" }
             ),
         ),
-        Ok(hits) => {
+        Ok((hits, wikipedia_only)) => {
             let limit = runtime.effort().search_results().min(hits.len());
-            let mut text = format!("Search results for “{query}”:\n");
+            let mut text = if wikipedia_only {
+                format!("Wikipedia-only fallback results for “{query}”; these are not general web search results:\n")
+            } else {
+                format!("Search results for “{query}”:\n")
+            };
             for (index, hit) in hits.iter().take(limit).enumerate() {
                 text.push_str(&format!(
                     "\n{}. {}\n{}\n{}\n",
@@ -99,7 +103,34 @@ pub async fn search(runtime: &ToolRuntime, call: &ToolCall) -> ToolOutcome {
     }
 }
 
-async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<Vec<SearchHit>, CoreError> {
+async fn run_search(runtime: &ToolRuntime, query: &str) -> Result<(Vec<SearchHit>, bool), CoreError> {
+    if let Ok(hits) = run_duckduckgo_search(runtime, query).await {
+        return Ok((hits, false));
+    }
+    let response = runtime.http().get("https://en.wikipedia.org/w/api.php")
+        .query(&[("action", "query"), ("list", "search"), ("format", "json"), ("utf8", "1"), ("srlimit", "10"), ("srsearch", query)])
+        .send().await.map_err(|err| CoreError::Network(err.to_string()))?;
+    if !response.status().is_success() {
+        return Err(CoreError::Network(format!("Wikipedia fallback returned HTTP {}", response.status())));
+    }
+    let hits = parse_wikipedia_results(&read_bounded(response).await?)?;
+    Ok((hits, true))
+}
+
+fn parse_wikipedia_results(body: &str) -> Result<Vec<SearchHit>, CoreError> {
+    let value: serde_json::Value = serde_json::from_str(body)
+        .map_err(|err| CoreError::Network(format!("invalid Wikipedia search response: {err}")))?;
+    let entries = value.pointer("/query/search").and_then(|v| v.as_array())
+        .ok_or_else(|| CoreError::Network("invalid Wikipedia search response".to_string()))?;
+    Ok(entries.iter().filter_map(|entry| {
+        let pageid = entry.get("pageid")?.as_u64()?;
+        let title = truncate_chars(entry.get("title")?.as_str()?, 200);
+        let snippet = clean(entry.get("snippet").and_then(|v| v.as_str()).unwrap_or(""));
+        Some(SearchHit { title, url: format!("https://en.wikipedia.org/?curid={pageid}"), snippet })
+    }).collect())
+}
+
+async fn run_duckduckgo_search(runtime: &ToolRuntime, query: &str) -> Result<Vec<SearchHit>, CoreError> {
     // Primary: the HTML endpoint. Fallback: the lite endpoint.
     let primary = runtime
         .http()
@@ -404,6 +435,20 @@ mod tests {
         let response = reqwest::get(format!("http://{address}/")).await.unwrap();
         assert!(read_bounded(response).await.is_err());
         server.join().unwrap();
+    }
+
+    #[test]
+    fn wikipedia_fallback_parses_scoped_results_and_rejects_invalid_responses() {
+        let body = r#"{"query":{"search":[{"pageid":42,"title":"A & B","snippet":"A <span class=\"searchmatch\">sample</span> &amp; text"},{"pageid":"bad","title":"ignored"}]}}"#;
+        let hits = parse_wikipedia_results(body).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].url, "https://en.wikipedia.org/?curid=42");
+        assert_eq!(hits[0].title, "A & B");
+        assert!(hits[0].snippet.contains("sample"));
+        assert!(!hits[0].snippet.contains("<span"));
+        assert!(parse_wikipedia_results("not json").is_err());
+        assert!(parse_wikipedia_results(r#"{"error":{"code":"bad"}}"#).is_err());
+        assert!(parse_wikipedia_results(r#"{"query":{"search":[]}}"#).unwrap().is_empty());
     }
 
     #[test]

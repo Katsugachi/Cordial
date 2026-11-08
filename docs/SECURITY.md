@@ -7,7 +7,7 @@ combination deserves a written threat model rather than good intentions.
 
 | Tool | Reach | Permission |
 | --- | --- | --- |
-| `web_search` | Sends a query string to DuckDuckGo | Auto: allowed |
+| `web_search` | Sends a query string to DuckDuckGo, and to Wikipedia if DuckDuckGo fails | Auto: allowed |
 | `web_fetch` | GETs a URL, returns text | Auto: allowed |
 | `browser_open` | Launches the installed Chrome/Chromium/Edge headless | Auto: allowed |
 | `browser_click`, `browser_type`, `browser_view` | Interacts with the current page | Auto: allowed |
@@ -112,8 +112,10 @@ llama.cpp runs in-process; there is no inference server listening on a port.
 
 - The model can still be wrong. The system prompt pushes it to cite sources and
   to say when it cannot check something; it cannot guarantee truth.
-- Search uses DuckDuckGo's HTML endpoints, which are unofficial and may rate
-  limit. The tool reports failures to the model instead of failing the turn.
+- Search uses DuckDuckGo's unofficial HTML endpoints, which may rate limit. If
+  both fail, the query is also sent to Wikipedia's search API and the results are
+  labelled Wikipedia-only, not general web results. Both services may fail; the
+  tool reports failures to the model instead of failing the turn.
 - User-selected PDF attachments are rendered locally by PDF.js in the webview.
   They are limited to 10 MB and three pages, with at most 4,000 extracted
   characters per page. Each page image and text are stored unencrypted under

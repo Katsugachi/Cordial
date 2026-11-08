@@ -141,4 +141,11 @@ checklist stayed 0/3 and the final cone answer was 103.32 cm²; the other two
 answers were correct and no scripts were left behind. This prompt experiment
 was also removed. In the same run, the architecture answer and checklist passed
 its independent arithmetic and citation checks, while the English task exhausted
-its tool budget without a substantive answer (seed 3823504413).
+its tool budget without a substantive answer (seed 3823504413). After removing
+the plan-call example, [run 42482161466](https://github.com/Katsugachi/Cordial/actions/runs/42482161466)
+again produced all three correct PDF answers at seed 3792486779 and left no
+scripts, but the checklist remained 0/3, so the evaluation still failed. The
+ordinary Rust, UI, desktop, sandbox and inference checks passed. At research seed
+3827455811, architecture's numerical results matched the independent checker
+but it had no checklist and made an invalid comparison between area and
+perimeter; English exhausted its tool budget. Both real-model jobs failed.
