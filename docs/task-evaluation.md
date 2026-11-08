@@ -109,4 +109,10 @@ diagonal as an edge; its checklist remained 1/3. In run 42457810071 (seed
 230 packs and $11040, but its intermediate waste area was wrong, it omitted a
 source URL and its checklist was unfinished. English exhausted its budget. The
 PDF answer said the rod fits but used the wrong cone formula, treated the cube
-diagonal as an edge and left all steps unfinished.
+diagonal as an edge and left all steps unfinished. In run 42460929795 (seed
+3806224140), architecture cited a source and calculated area 378 and perimeter
+82, but gave 12 packs/$576 instead of 167 packs/$8016 and left its plan
+unfinished. English marked its plan complete despite identifying the figures
+of speech incorrectly, treating figurative images as missing pictures and not
+citing a source URL. The PDF attempt correctly calculated the rod fit but gave
+94.25 cm² for the cone and 512 cm³ for the cube; its checklist was 1/3.

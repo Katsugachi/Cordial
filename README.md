@@ -12,24 +12,32 @@ On first launch it downloads the Q4_K_M weights (1.1 GB) + the vision
 projector (203 MB), and from then on the network is used only when the agent
 searches or browses for you.  <br><br>
 The X post from LiquidAI said it was almost as capable as GPT 5.6 Luna and i guess if it's stable enough to be in Cordial that's good. <br><br>
-Web fetch, navigation and search are still heavily handicapped on restricted networks.
+Web access is off for new settings. Use **Web off** in the composer to enable
+search and browsing after reviewing the warning. Existing saved preferences are
+preserved. Web tools are not network-isolated and can reach local or private
+services; see [Security](docs/SECURITY.md). Search may also be unavailable on
+restricted networks.
 
 ## What it does
 
-- **Answers with sources. (most of the time)** The system prompt pushes the model to search before it
-  states a fact, to open the best result, and to cite links inline.
+- **Can research with sources.** When web access is enabled, the model can search,
+  open pages and cite links. It can still omit citations or make mistakes; check
+  sources and calculations before relying on the answer.
 - **Uses tools honestly.** `web_search`, `web_fetch`, and a real browser driven
   over the Chrome DevTools Protocol (`browser_open`, `browser_click`,
   `browser_type`, `browser_view`). The browser returns both page text and a
   screenshot, so a 2B vision model can *see* what it is doing.
 - **Handles what you give it.** Images go to the vision encoder; text files are
-  folded into the prompt; the model can read, list and write files inside a
-  sandboxed workspace folder.
+  folded into the prompt; the model can read, list and write files inside the
+  selected workspace. Filesystem checks are path-based, not an OS sandbox.
 - **Asks before it acts.** Two permission modes — Auto (reads and network run,
   writes ask once) and Manual (everything asks) — with approvals rendered inline.
-- **Keeps answers short.** Effort levels (Low / Medium / High) cap tool rounds,
-  output tokens and page reads. Low effort also switches reasoning off. The
-  default prompt asks for the answer first, no preamble, and at most three links.
+- **Offers Task mode.** The experimental Task effort keeps a checklist and saves
+  progress, but does not automatically resume after an exit. A completed plan is
+  the model's report, not independent verification. The isolated Python calculator
+  is available only in an [experimental build](docs/python-sandbox.md).
+- **Adjusts effort.** Low / Medium / High cap tool rounds, output tokens and page
+  reads. Low effort also switches reasoning off.
 - **Runs offline.** No telemetry, no analytics, no accounts. Nothing leaves the
   machine unless a web tool is called.
 
@@ -73,7 +81,7 @@ Previously installed versions do not have the new NSIS uninstall hook.
 
 ## Build from source
 
-Requirements: Rust 1.83+, Node 22+, CMake 3.16+, a C++17 compiler, and on Linux
+Requirements: Rust 1.86+, Node 22+, CMake 3.16+, a C++17 compiler, and on Linux
 the Tauri packages (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libsoup-3.0-dev`,
 `libjavascriptcoregtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`).
 
