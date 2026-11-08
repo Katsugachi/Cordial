@@ -69,7 +69,9 @@ mod tempdir {
 }
 
 fn pdf_crop_prefix() -> Option<String> {
-    std::env::var("CORDIAL_PDF_CROP_PREFIX").ok().filter(|value| !value.is_empty())
+    std::env::var("CORDIAL_PDF_CROP_PREFIX")
+        .ok()
+        .filter(|value| !value.is_empty())
 }
 
 impl Live {
@@ -106,7 +108,11 @@ impl Live {
 
         // The optional visual-region experiment needs more image positions.
         // Ordinary live tests keep the existing 8K context budget.
-        let context = if pdf_crop_prefix().is_some() { 32_768 } else { 8_192 };
+        let context = if pdf_crop_prefix().is_some() {
+            32_768
+        } else {
+            8_192
+        };
         let options = engine_options(
             &paths.weights,
             paths.projector.as_deref(),
@@ -547,7 +553,11 @@ async fn rendered_pdf_worksheet_end_to_end() {
             cordial_core::prompt::DEFAULT_MEDIA_MARKER
         ),
         media: vec![PathBuf::from(&image)],
-        max_tokens: if pdf_crop_prefix().is_some() { 32_576 } else { 8_000 },
+        max_tokens: if pdf_crop_prefix().is_some() {
+            32_576
+        } else {
+            8_000
+        },
         thinking: false,
         sampling: SamplingParams::default(),
     };
@@ -563,11 +573,25 @@ async fn rendered_pdf_worksheet_end_to_end() {
     live.max_tool_rounds_override = Some(18);
     let crop_prefix = pdf_crop_prefix();
     let mut attachments = if let Some(prefix) = crop_prefix.as_deref() {
-        (1..=3).map(|index| Attachment { kind: AttachmentKind::Image, name: format!("worksheet.pdf, page 1 (overlapping region {index} of 3)"), path: format!("{prefix}-{index}.png") }).collect()
+        (1..=3)
+            .map(|index| Attachment {
+                kind: AttachmentKind::Image,
+                name: format!("worksheet.pdf, page 1 (overlapping region {index} of 3)"),
+                path: format!("{prefix}-{index}.png"),
+            })
+            .collect()
     } else {
-        vec![Attachment { kind: AttachmentKind::Image, name: "worksheet.pdf, page 1 (image)".into(), path: image }]
+        vec![Attachment {
+            kind: AttachmentKind::Image,
+            name: "worksheet.pdf, page 1 (image)".into(),
+            path: image,
+        }]
     };
-    attachments.push(Attachment { kind: AttachmentKind::Text, name: "worksheet.pdf, page 1 (text)".into(), path: text_path });
+    attachments.push(Attachment {
+        kind: AttachmentKind::Text,
+        name: "worksheet.pdf, page 1 (text)".into(),
+        path: text_path,
+    });
     let request = if crop_prefix.is_some() {
         "Complete the attached worksheet. The three images are overlapping regions of the same page, from top to bottom. Show reasoning for each answer. Use Python for calculations and clean up any temporary scripts."
     } else {
