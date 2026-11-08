@@ -926,10 +926,34 @@ async fn research_pause_expires_even_without_other_tool_work() {
     let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"done"}]</parameter></function></tool_call>"#;
     let mut cfg = config(Effort::Task, PermissionMode::Auto);
     cfg.web_enabled = true;
-    let (result, events) = run_turn(&fixture, vec![plan, a, b, c, d, blocked, blocked, blocked, after, done, "Done."], cfg, &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![
+            plan, a, b, c, d, blocked, blocked, blocked, after, done, "Done.",
+        ],
+        cfg,
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
-    assert_eq!(session.messages.iter().filter(|m| m.content.contains("Research is temporarily paused")).count(), 3);
-    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")).count(), 5);
+    assert_eq!(
+        session
+            .messages
+            .iter()
+            .filter(|m| m.content.contains("Research is temporarily paused"))
+            .count(),
+        3
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(
+                |e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")
+            )
+            .count(),
+        5
+    );
 }
 
 #[tokio::test]

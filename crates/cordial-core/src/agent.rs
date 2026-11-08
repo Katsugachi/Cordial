@@ -545,7 +545,15 @@ impl<'a> Agent<'a> {
                         }
                     } else {
                         research_streak = 0;
-                        if ok && (call.name != "update_plan" || session.plan.iter().map(|step| step.status).collect::<Vec<_>>() != previous_statuses) {
+                        if ok
+                            && (call.name != "update_plan"
+                                || session
+                                    .plan
+                                    .iter()
+                                    .map(|step| step.status)
+                                    .collect::<Vec<_>>()
+                                    != previous_statuses)
+                        {
                             research_pause_remaining = 0;
                         }
                     }
