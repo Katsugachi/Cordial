@@ -164,11 +164,20 @@ mod tests {
         let mut policy = PermissionPolicy::new(PermissionMode::Auto);
         policy.grant("write_file");
         policy.set_mode(PermissionMode::Manual);
-        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
+        assert!(matches!(
+            policy.evaluate(&call("write_file")),
+            Permission::Ask { .. }
+        ));
         // Even an explicit grant cannot bypass manual mode.
         policy.grant("write_file");
-        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
+        assert!(matches!(
+            policy.evaluate(&call("write_file")),
+            Permission::Ask { .. }
+        ));
         policy.set_mode(PermissionMode::Auto);
-        assert!(matches!(policy.evaluate(&call("write_file")), Permission::Ask { .. }));
+        assert!(matches!(
+            policy.evaluate(&call("write_file")),
+            Permission::Ask { .. }
+        ));
     }
 }

@@ -64,7 +64,11 @@ pub struct Core {
     python_path: Option<PathBuf>,
 }
 
-fn select_permission_session(policy: &mut PermissionPolicy, current: &mut Option<String>, session_id: &str) {
+fn select_permission_session(
+    policy: &mut PermissionPolicy,
+    current: &mut Option<String>,
+    session_id: &str,
+) {
     if current.as_deref() != Some(session_id) {
         policy.clear_grants();
         *current = Some(session_id.to_string());
