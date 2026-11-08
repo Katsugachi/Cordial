@@ -301,7 +301,9 @@ impl SessionStore {
         let bytes = std::fs::read(&path)?;
         let session: Session = serde_json::from_slice(&bytes)?;
         if session.id != id {
-            return Err(CoreError::Other("session ID does not match its file".to_string()));
+            return Err(CoreError::Other(
+                "session ID does not match its file".to_string(),
+            ));
         }
         Ok(session)
     }
@@ -409,13 +411,25 @@ mod tests {
 
     #[test]
     fn store_rejects_path_traversal_and_mismatched_session_files() {
-        let root = std::env::temp_dir().join(format!("cordial-session-security-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("cordial-session-security-{}", uuid::Uuid::new_v4()));
         let dir = root.join("sessions");
         std::fs::create_dir_all(&dir).unwrap();
         let outside = root.join("outside.json");
         std::fs::write(&outside, "do not change").unwrap();
         let store = SessionStore::new(&dir);
-        for id in ["../outside", "../../outside", "/tmp/outside", "a/b", "a\\\\b", "", ".", "..", "x\0y", "00000000-0000-0000-0000-000000000000/../../outside"] {
+        for id in [
+            "../outside",
+            "../../outside",
+            "/tmp/outside",
+            "a/b",
+            "a\\\\b",
+            "",
+            ".",
+            "..",
+            "x\0y",
+            "00000000-0000-0000-0000-000000000000/../../outside",
+        ] {
             assert!(store.load(id).is_err(), "load accepted {id:?}");
             assert!(store.delete(id).is_err(), "delete accepted {id:?}");
             let mut session = Session::new();
