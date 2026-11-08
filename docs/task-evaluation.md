@@ -51,7 +51,11 @@ and [run 42383103954](https://github.com/Katsugachi/Cordial/actions/runs/4238310
 With a different recorded seed, [run 42436304967](https://github.com/Katsugachi/Cordial/actions/runs/42436304967)
 also failed: the model used an incorrect cone formula, an incorrect base-diagonal
 comparison and an edge in place of the cube diagonal, with an unfinished plan.
-The image-token capacity probe passed before these worksheet attempts.
+The image-token capacity probe passed before these worksheet attempts. A
+`[pdf-test] [pdf-zoom]` experiment instead supplies three overlapping generic
+page regions, with a larger test context and the same seed as run 42447192434.
+It is an evaluation-only variant, not a change to desktop PDF attachments;
+a successful sample would not establish general visual or mathematical accuracy.
 The isolated runtime passed its Linux security tests,
 but it is not enabled in default desktop builds. PDF diagrams require visual rendering,
 not text extraction alone.

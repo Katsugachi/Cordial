@@ -219,22 +219,29 @@ jobs:
             CORDIAL_PDF_RENDER_PATH="$RUNNER_TEMP/worksheet.png" \
             CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
             npm --prefix ui test -- --run tests/pdf.test.ts
+      - name: Prepare overlapping page regions for the visual experiment
+        if: contains(github.event.head_commit.message, '[pdf-zoom]') && contains(github.event.head_commit.message, '[pdf-test]')
+        run: |
+          node --test scripts/ci/test_pdf_crops.mjs
+          node scripts/ci/pdf_crops.mjs "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet-region"
       - name: Evaluate supplied worksheet with the real model
-        timeout-minutes: 50
+        timeout-minutes: 75
         if: contains(github.event.head_commit.message, '[pdf-test]')
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
+          CORDIAL_PDF_CROP_PREFIX: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && format('{0}/worksheet-region', runner.temp) || '' }}
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
-          CORDIAL_LIVE_SEED: ${{ github.run_id }}
+          # Match the earlier full-page run for a controlled comparison.
+          CORDIAL_LIVE_SEED: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && '3792486779' || github.run_id }}
         run: |
           set -o pipefail
           cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
       - name: Remove temporary worksheet renders
         if: always() && contains(github.event.head_commit.message, '[pdf-test]')
-        run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt"
+        run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt" "$RUNNER_TEMP/worksheet-region-1.png" "$RUNNER_TEMP/worksheet-region-2.png" "$RUNNER_TEMP/worksheet-region-3.png"
       - name: Research worksheet evaluation
         if: contains(github.event.head_commit.message, '[research]')
         env:
