@@ -40,6 +40,10 @@ clears remembered grants.
 - **Browser.** The browser runs headless with its own throwaway profile in the
   app-data scratch folder, `--mute-audio --no-first-run`, and is killed when the
   session ends. It is the user's own browser binary: Cordial does not ship one.
+- **Session IDs.** Session storage accepts only canonical UUIDs and checks that
+  a saved session's ID matches its filename. This prevents ID-based path
+  traversal; it does not protect against a hostile local process racing or
+  replacing files in the data directory.
 - **Renderer.** All model output is rendered through DOMPurify with a tag
   allowlist and no data attributes (`ui/src/markdown.ts`). Model output is treated
   as untrusted, because a fetched page can steer it.

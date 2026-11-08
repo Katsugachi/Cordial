@@ -310,11 +310,7 @@ impl AppState {
         };
         select_permission_session(policy, permission_session_id, &session_id);
 
-        let mut session = store.load(&session_id).unwrap_or_else(|_| {
-            let mut session = Session::new();
-            session.id = session_id;
-            session
-        });
+        let mut session = store.load(&session_id).map_err(|err| err.to_string())?;
 
         let config = AgentConfig::from_settings(settings);
         let result = {

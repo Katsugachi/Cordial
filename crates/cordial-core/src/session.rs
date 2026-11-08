@@ -276,14 +276,20 @@ impl SessionStore {
         Self { dir: dir.into() }
     }
 
-    fn file_for(&self, id: &str) -> PathBuf {
-        self.dir.join(format!("{id}.json"))
+    fn file_for(&self, id: &str) -> Result<PathBuf, CoreError> {
+        let valid = uuid::Uuid::parse_str(id)
+            .ok()
+            .is_some_and(|uuid| uuid.hyphenated().to_string() == id);
+        if !valid {
+            return Err(CoreError::Other("invalid session ID".to_string()));
+        }
+        Ok(self.dir.join(format!("{id}.json")))
     }
 
     pub fn save(&self, session: &Session) -> Result<(), CoreError> {
         std::fs::create_dir_all(&self.dir)?;
         let json = serde_json::to_vec_pretty(session)?;
-        let final_path = self.file_for(&session.id);
+        let final_path = self.file_for(&session.id)?;
         let tmp = final_path.with_extension("json.tmp");
         std::fs::write(&tmp, json)?;
         std::fs::rename(&tmp, &final_path)?;
@@ -291,13 +297,17 @@ impl SessionStore {
     }
 
     pub fn load(&self, id: &str) -> Result<Session, CoreError> {
-        let path = self.file_for(id);
+        let path = self.file_for(id)?;
         let bytes = std::fs::read(&path)?;
-        Ok(serde_json::from_slice(&bytes)?)
+        let session: Session = serde_json::from_slice(&bytes)?;
+        if session.id != id {
+            return Err(CoreError::Other("session ID does not match its file".to_string()));
+        }
+        Ok(session)
     }
 
     pub fn delete(&self, id: &str) -> Result<(), CoreError> {
-        let path = self.file_for(id);
+        let path = self.file_for(id)?;
         if path.exists() {
             std::fs::remove_file(path)?;
         }
@@ -323,6 +333,9 @@ impl SessionStore {
             let Ok(session) = serde_json::from_slice::<Session>(&bytes) else {
                 continue;
             };
+            if self.file_for(&session.id).ok().as_deref() != Some(path.as_path()) {
+                continue;
+            }
             out.push(SessionSummary {
                 id: session.id,
                 title: session.title,
@@ -392,6 +405,31 @@ mod tests {
         assert_eq!(call.int("y"), Some(88));
         assert!(call.flag("submit"));
         assert!(call.preview().starts_with("browser_click(x=120"));
+    }
+
+    #[test]
+    fn store_rejects_path_traversal_and_mismatched_session_files() {
+        let root = std::env::temp_dir().join(format!("cordial-session-security-{}", uuid::Uuid::new_v4()));
+        let dir = root.join("sessions");
+        std::fs::create_dir_all(&dir).unwrap();
+        let outside = root.join("outside.json");
+        std::fs::write(&outside, "do not change").unwrap();
+        let store = SessionStore::new(&dir);
+        for id in ["../outside", "../../outside", "/tmp/outside", "a/b", "a\\\\b", "", ".", "..", "x\0y", "00000000-0000-0000-0000-000000000000/../../outside"] {
+            assert!(store.load(id).is_err(), "load accepted {id:?}");
+            assert!(store.delete(id).is_err(), "delete accepted {id:?}");
+            let mut session = Session::new();
+            session.id = id.to_string();
+            assert!(store.save(&session).is_err(), "save accepted {id:?}");
+        }
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "do not change");
+        let first = Session::new();
+        let other = Session::new();
+        let mismatched = dir.join(format!("{}.json", first.id));
+        std::fs::write(&mismatched, serde_json::to_vec(&other).unwrap()).unwrap();
+        assert!(store.load(&first.id).is_err());
+        assert!(store.list().unwrap().is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
