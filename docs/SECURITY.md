@@ -130,7 +130,10 @@ llama.cpp runs in-process; there is no inference server listening on a port.
 
 Task mode is experimental. Completed and partial Task answers carry a reminder to
 check results independently. The checklist reflects the model’s own reports and is
-not proof of correctness. Work stops when the app exits, when its budget runs
+not proof of correctness. During an automatic reconciliation prompt, existing
+step titles must be preserved in order; this prevents that prompt from silently
+replacing unfinished steps but does not validate the statuses. Other plan updates
+can still revise the checklist. Work stops when the app exits, when its budget runs
 out, or when the model fails; checkpointing does not automatically resume it.
 On a follow-up turn, an interrupted tool call is recorded as having an unknown
 outcome and is not automatically replayed. A write may already have occurred, so

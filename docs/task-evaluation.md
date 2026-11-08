@@ -134,4 +134,11 @@ region experiment at seed 3792486779 after adding temporary draft context for
 checklist reconciliation. The model still left the checklist 0/3 and changed the
 cone answer from the earlier correct 75.40 cm² to 103.67 cm², while retaining
 the correct rod and cube results. The draft-context change was removed after
-this regression. A single comparison does not establish its cause.
+this regression. A single comparison does not establish its cause. A later
+[run 42478210068](https://github.com/Katsugachi/Cordial/actions/runs/42478210068)
+tried an explicit plan-call example instead, again with the same crop seed. The
+checklist stayed 0/3 and the final cone answer was 103.32 cm²; the other two
+answers were correct and no scripts were left behind. This prompt experiment
+was also removed. In the same run, the architecture answer and checklist passed
+its independent arithmetic and citation checks, while the English task exhausted
+its tool budget without a substantive answer (seed 3823504413).

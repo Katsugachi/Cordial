@@ -249,7 +249,8 @@ impl<'a> Agent<'a> {
             if planning {
                 planning_attempts += 1;
             }
-            if planning || reconcile_next {
+            let reconciling_plan = reconcile_next;
+            if planning || reconciling_plan {
                 tools_for_prompt.retain(|tool| tool.name == "update_plan");
             } else if suppress_plan_next {
                 tools_for_prompt.retain(|tool| tool.name != "update_plan");
@@ -380,7 +381,7 @@ impl<'a> Agent<'a> {
                     retry_instruction = if session.plan.is_empty() {
                         "First create a checklist using this exact tool format, changing the titles to fit the request: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet."
                     } else {
-                        "Review the tool results and the current checklist. Call update_plan now with every existing step and its current status. Format example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Example step\",\"status\":\"pending\"}]</parameter></function></tool_call>. Replace the example with all current step titles. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
+                        "Review the tool results and the current checklist. Call update_plan now with every checklist step and its current status. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
                     };
                     self.events.emit(AgentEvent::GenerationReset {
                         turn_id: turn_id.clone(),
@@ -527,7 +528,7 @@ impl<'a> Agent<'a> {
                 }
                 let previous_statuses: Vec<_> =
                     session.plan.iter().map(|step| step.status).collect();
-                let ok = self.execute_call(session, &turn_id, call).await;
+                let ok = self.execute_call(session, &turn_id, call, reconciling_plan).await;
                 if self.config.effort == Effort::Task {
                     if call.name == "web_search" || call.name == "web_fetch" {
                         research_streak += 1;
@@ -690,6 +691,7 @@ impl<'a> Agent<'a> {
         session: &mut Session,
         turn_id: &str,
         call: &ToolCall,
+        reconciling_plan: bool,
     ) -> bool {
         let risk_label = tools::spec_for(&call.name)
             .map(|spec| spec.risk.label().to_string())
@@ -747,7 +749,7 @@ impl<'a> Agent<'a> {
         });
 
         let outcome = if call.name == "update_plan" {
-            apply_plan(session, call)
+            apply_plan(session, call, reconciling_plan)
         } else {
             self.tools.execute(call).await
         };
@@ -1038,7 +1040,7 @@ fn plan_complete(session: &Session) -> bool {
             .all(|step| matches!(step.status, PlanStatus::Done | PlanStatus::Blocked))
 }
 
-fn apply_plan(session: &mut Session, call: &ToolCall) -> tools::ToolOutcome {
+fn apply_plan(session: &mut Session, call: &ToolCall, reconciling: bool) -> tools::ToolOutcome {
     let Some(raw) = call.arg("steps") else {
         return tools::ToolOutcome::fail("missing steps", "Error: `steps` is required.");
     };
@@ -1095,6 +1097,9 @@ fn apply_plan(session: &mut Session, call: &ToolCall) -> tools::ToolOutcome {
             status,
             note: note.to_string(),
         });
+    }
+    if reconciling && (session.plan.len() != steps.len() || session.plan.iter().zip(&steps).any(|(old, new)| old.title != new.title)) {
+        return tools::ToolOutcome::fail("invalid plan", "Error: during checklist reconciliation, keep every existing step title in the same order. Update statuses and notes without replacing the task.");
     }
     let running = steps
         .iter()
