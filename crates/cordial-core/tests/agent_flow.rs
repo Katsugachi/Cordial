@@ -674,37 +674,26 @@ async fn blocked_steps_are_not_reported_as_task_completion() {
 }
 
 #[tokio::test]
-async fn task_stops_after_repeated_failed_fetches() {
+async fn task_bounds_repeated_fetches_without_stopping_early() {
     let fixture = Fixture::new("failed-fetch-loop");
     let mut session = Session::new();
     let plan = "<tool_call><function=update_plan><parameter=steps>[{\"title\":\"Research\",\"status\":\"running\"}]</parameter></function></tool_call>";
     let fetch = "<tool_call><function=web_fetch><parameter=url>file://invalid</parameter></function></tool_call>";
     let mut cfg = config(Effort::Task, PermissionMode::Auto);
     cfg.web_enabled = true;
+    cfg.max_tool_rounds = 5;
     let (result, events) = run_turn(
         &fixture,
-        vec![plan, fetch, fetch, fetch, fetch],
+        vec![plan, fetch, fetch, fetch, fetch, "I could not complete the research."],
         cfg,
         &mut session,
         None,
     )
     .await;
-    assert_eq!(result.stop, StopReason::Failed);
-    assert!(session
-        .messages
-        .last()
-        .unwrap()
-        .content
-        .contains("repeated attempts"));
-    assert_eq!(
-        events
-            .iter()
-            .filter(
-                |e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")
-            )
-            .count(),
-        3
-    );
+    assert_eq!(result.stop, StopReason::ToolBudget);
+    assert!(session.messages.last().unwrap().content.contains("Task incomplete"));
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, summary, .. } if name == "web_fetch" && summary != "skipped repeated fetch")).count(), 2);
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { summary, .. } if summary == "skipped repeated fetch")).count(), 2);
 }
 
 #[tokio::test]
@@ -970,7 +959,7 @@ async fn repeated_fetch_nudges_task_to_work_before_aborting() {
     cfg.web_enabled = true;
     let (result, events) = run_turn(
         &fixture,
-        vec![plan, fetch, fetch, read, done, "The notes say Friday."],
+        vec![plan, fetch, fetch, fetch, read, done, "The notes say Friday."],
         cfg,
         &mut session,
         None,

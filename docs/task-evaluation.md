@@ -47,8 +47,11 @@ rod-fit conclusion, incorrect cube volume and an incomplete checklist. In
 the cone and cube answers were again incorrect, the rod-fit statements
 contradicted each other, and the checklist remained incomplete. The same errors
 recurred in [run 42380760745](https://github.com/Katsugachi/Cordial/actions/runs/42380760745)
-and [run 42383103954](https://github.com/Katsugachi/Cordial/actions/runs/42383103954);
-the image-token capacity probe passed before the worksheet attempts.
+and [run 42383103954](https://github.com/Katsugachi/Cordial/actions/runs/42383103954).
+With a different recorded seed, [run 42436304967](https://github.com/Katsugachi/Cordial/actions/runs/42436304967)
+also failed: the model used an incorrect cone formula, an incorrect base-diagonal
+comparison and an edge in place of the cube diagonal, with an unfinished plan.
+The image-token capacity probe passed before these worksheet attempts.
 The isolated runtime passed its Linux security tests,
 but it is not enabled in default desktop builds. PDF diagrams require visual rendering,
 not text extraction alone.
@@ -81,4 +84,7 @@ misidentified personification and treated figurative images as missing pictures;
 the architecture attempt exhausted its context. In run 42383103954, reasoning
 compaction allowed the English task to advance its checklist, but those English
 errors persisted; the architecture flooring calculation was again wrong and its
-checklist absent. These results remain failures even though some tools succeeded.
+checklist absent. In run 42436304967, the English task correctly identified
+personification but did not compare the literary images or cite its source; the
+architecture attempt again stopped after repeated fetches. Both checklists were
+unfinished. These results remain failures even though some tools succeeded.

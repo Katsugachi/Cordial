@@ -68,6 +68,16 @@ impl AgentConfig {
     }
 }
 
+// Treat fragments as the same fetched resource, while preserving query strings
+// (which may identify genuinely different pages).
+fn fetch_key(raw: &str) -> String {
+    let raw = raw.trim();
+    match url::Url::parse(raw) {
+        Ok(mut url) => { url.set_fragment(None); url.to_string() }
+        Err(_) => raw.to_string(),
+    }
+}
+
 // A bare search-argument object is ambiguous, so never execute it directly.
 // Only use this signal to ask the model to regenerate an explicit tool call.
 fn looks_like_search_arguments(content: &str, user_text: &str) -> bool {
@@ -195,14 +205,13 @@ impl<'a> Agent<'a> {
         let mut planning_attempts = 0u32;
         let mut reconcile_next = false;
         let mut suppress_plan_next = false;
-        let mut suppress_fetch_next = false;
         let mut unchanged_plan_updates = 0u32;
         let mut empty_task_retries = 0u32;
         let mut truncated_task_retry = false;
         let mut tool_context = (self.config.max_tool_result_chars, true, true);
-        let mut repeated_fetches: HashMap<(String, String), u32> = HashMap::new();
+        let mut repeated_fetches: HashMap<String, u32> = HashMap::new();
 
-        let outcome = 'turn: loop {
+        let outcome = loop {
             if self.cancelled() {
                 break StopReason::Cancelled;
             }
@@ -225,12 +234,8 @@ impl<'a> Agent<'a> {
             } else if suppress_plan_next {
                 tools_for_prompt.retain(|tool| tool.name != "update_plan");
             }
-            if suppress_fetch_next {
-                tools_for_prompt.retain(|tool| tool.name != "web_fetch");
-            }
             reconcile_next = false;
             suppress_plan_next = false;
-            suppress_fetch_next = false;
             let output = match self
                 .generate_with_retry(
                     session,
@@ -440,6 +445,23 @@ impl<'a> Agent<'a> {
                     session.push(result);
                     continue;
                 }
+                if self.config.effort == Effort::Task && call.name == "web_fetch" {
+                    let key = fetch_key(call.arg("url").unwrap_or(""));
+                    if repeated_fetches.get(&key).copied().unwrap_or(0) >= 2 {
+                        let detail = "This source was already fetched twice in this task. Use its earlier results or choose a different source; continue the remaining work.";
+                        self.events.emit(AgentEvent::ToolCallFinished {
+                            turn_id: turn_id.clone(), call_id: call.id.clone(), name: call.name.clone(),
+                            ok: false, summary: "skipped repeated fetch".to_string(),
+                            detail: detail.to_string(), thumbnail: None,
+                        });
+                        let result = Message::tool_result(call.id.clone(), detail);
+                        self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.clone(), message: result.clone() });
+                        session.push(result);
+                        self.checkpoint(session);
+                        retry_instruction = "Do not refetch that source. Use earlier evidence, try a different source if needed, and continue the remaining task.";
+                        continue;
+                    }
+                }
                 let previous_statuses: Vec<_> =
                     session.plan.iter().map(|step| step.status).collect();
                 let ok = self.execute_call(session, &turn_id, call).await;
@@ -466,36 +488,14 @@ impl<'a> Agent<'a> {
                     unchanged_plan_updates = 0;
                 }
                 if self.config.effort == Effort::Task && call.name == "web_fetch" {
-                    let url = call.arg("url").unwrap_or("").trim().to_string();
-                    let result = session
-                        .messages
-                        .last()
-                        .map(|m| m.content.clone())
-                        .unwrap_or_default();
-                    let count = repeated_fetches.entry((url, result)).or_default();
+                    let key = fetch_key(call.arg("url").unwrap_or(""));
+                    let count = repeated_fetches.entry(key).or_default();
                     *count += 1;
                     if *count == 2 {
-                        suppress_fetch_next = true;
-                        retry_instruction = "The same source has already returned the same result twice. Do not fetch it again. Use the information already obtained, work on the remaining questions, or choose a different source if needed.";
+                        retry_instruction = "The same source was fetched twice. Use the results already obtained, work on the remaining questions, or choose a different source if needed.";
                         self.events.emit(AgentEvent::Notice {
-                            message: "Avoiding a repeated source fetch; continuing the task."
-                                .to_string(),
+                            message: "Avoiding a repeated source fetch; continuing the task.".to_string(),
                         });
-                    }
-                    if *count >= 3 {
-                        let reason = if ok {
-                            "returned the same result"
-                        } else {
-                            "failed"
-                        };
-                        let message = Message::assistant(format!("Task incomplete: repeated attempts to fetch the same source {reason}. Review the source or supply another one before continuing."), None, vec![]);
-                        self.events.emit(AgentEvent::AssistantMessage {
-                            turn_id: turn_id.clone(),
-                            message: message.clone(),
-                        });
-                        session.push(message);
-                        self.checkpoint(session);
-                        break 'turn StopReason::Failed;
                     }
                 }
                 if self.cancelled() {
@@ -1029,6 +1029,12 @@ mod context_compaction_tests {
     use super::*;
     use crate::backend::{ScriptFailure, ScriptedBackend};
     use crate::session::Role;
+
+    #[test]
+    fn fetch_guard_normalizes_fragments_without_collapsing_queries() {
+        assert_eq!(fetch_key("https://EXAMPLE.com/page#first"), fetch_key("https://example.com/page#second"));
+        assert_ne!(fetch_key("https://example.com/page?q=one"), fetch_key("https://example.com/page?q=two"));
+    }
 
     #[tokio::test]
     async fn overflow_omits_current_reasoning_without_changing_transcript() {

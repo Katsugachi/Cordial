@@ -99,21 +99,32 @@ pub fn prepare(inputs: Vec<AttachmentInput>, scratch: &Path) -> Result<Vec<Attac
     }
     let directory = scratch.join(uuid::Uuid::new_v4().to_string());
     fs::create_dir(&directory).map_err(|err| format!("Cannot create PDF scratch folder: {err}"))?;
-    for (index, item) in prepared.iter_mut().enumerate() {
-        if let Some(bytes) = &item.bytes {
-            let file = directory.join(format!("page-{index}.{}", item.extension));
-            let mut handle = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&file)
-                .map_err(|err| format!("Cannot save PDF page: {err}"))?;
-            handle
-                .write_all(bytes)
-                .map_err(|err| format!("Cannot save PDF page: {err}"))?;
-            item.attachment.path = file.to_string_lossy().into_owned();
-        }
-    }
+    persist_pages(&directory, &mut prepared)?;
     Ok(prepared.into_iter().map(|p| p.attachment).collect())
+}
+
+// The directory was created exclusively for this preparation attempt. Do not
+// retain partially written user data if any page cannot be saved.
+fn persist_pages(directory: &Path, prepared: &mut [Prepared]) -> Result<(), String> {
+    let result = (|| {
+        for (index, item) in prepared.iter_mut().enumerate() {
+            if let Some(bytes) = &item.bytes {
+                let file = directory.join(format!("page-{index}.{}", item.extension));
+                let mut handle = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&file)
+                    .map_err(|err| format!("Cannot save PDF page: {err}"))?;
+                handle.write_all(bytes).map_err(|err| format!("Cannot save PDF page: {err}"))?;
+                item.attachment.path = file.to_string_lossy().into_owned();
+            }
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        fs::remove_dir_all(directory).map_err(|error| format!("PDF page could not be saved, and partial attachments could not be removed: {error}"))?;
+    }
+    result
 }
 
 fn scratch_usage(root: &Path) -> Result<u64, String> {
@@ -252,6 +263,21 @@ mod tests {
         assert!(prepare(vec![escaped], &root).is_err());
         assert!(prepare(vec![input("command", "x")], &root).is_err());
         assert!(!root.exists());
+    }
+
+    #[test]
+    fn failed_page_write_removes_partial_attachments() {
+        let directory = std::env::temp_dir().join(format!("cordial-pdf-partial-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        // Make the second create_new fail after the first page is written.
+        fs::write(directory.join("page-1.txt"), "collision").unwrap();
+        let make_page = || Prepared {
+            attachment: Attachment { kind: AttachmentKind::Text, name: "page".into(), path: "inline:test".into() },
+            bytes: Some(b"private page data".to_vec()),
+            extension: "txt",
+        };
+        assert!(persist_pages(&directory, &mut [make_page(), make_page()]).is_err());
+        assert!(!directory.exists());
     }
 
     #[test]

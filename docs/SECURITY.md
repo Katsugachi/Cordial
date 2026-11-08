@@ -113,7 +113,8 @@ llama.cpp runs in-process; there is no inference server listening on a port.
   They are limited to 10 MB and three pages, with at most 4,000 extracted
   characters per page. Each page image and text are stored unencrypted under
   `scratch/pdf-attachments/` so saved sessions can refer to them; storage is
-  capped at 100 MB. No OCR, form filling, complete layout fidelity, or model
+  capped at 100 MB. Failed writes attempt to remove their partial scratch folder
+  and report cleanup failures. No OCR, form filling, complete layout fidelity, or model
   accuracy is guaranteed. Large documents are refused rather than partially
   attached. Parsing an untrusted PDF still carries risks. Web-fetch PDFs and
   workspace PDF reads are not supported.
