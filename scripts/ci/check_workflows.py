@@ -33,6 +33,7 @@ EXPECTED = {
     "format.yml": {"rustfmt": MEDIUM},
     "live.yml": {"behaviour": MEDIUM},
     "release.yml": {
+        "preview-11-evaluation": MEDIUM,
         "build": "${{ matrix.os }}",
         "validation": MEDIUM,
         "smoke": MEDIUM,
@@ -104,6 +105,15 @@ def main() -> None:
                   "Release: default token must be read-only")
             check(jobs["publish-release"]["permissions"]["contents"] == "write",
                   "Release: publication needs its scoped write grant")
+            gate = jobs["preview-11-evaluation"]
+            check(gate["permissions"] == {"contents": "read", "actions": "read"},
+                  "Release: preview 11 gate needs read-only Actions access")
+            check("preview-11-evaluation" in jobs["build"]["needs"],
+                  "Release: builds must depend on the preview 11 gate")
+            check(any("scripts/ci/preview_11_gate.py" in step.get("run", "")
+                      and "preview-11" in step.get("if", "")
+                      for step in gate["steps"]),
+                  "Release: preview 11 must check matching evaluations")
             targets = jobs["build"]["strategy"]["matrix"]["include"]
             check({t["label"]: t["os"] for t in targets} == NATIVE_TARGETS,
                   "Release: native architecture or Linux ABI baseline changed")

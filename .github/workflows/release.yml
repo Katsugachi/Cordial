@@ -27,7 +27,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preview-11-evaluation:
+    name: Preview 11 evaluation gate
+    runs-on: instabox-medium
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the evaluation gate
+        run: python3 scripts/ci/test_preview_11_gate.py
+      - name: Require matching full-page and research evaluations
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.publish && inputs.preview_number == '11') ||
+          (github.event_name == 'push' && github.ref == 'refs/tags/v0.1.0-preview-11')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/preview_11_gate.py
+
   build:
+    needs: [preview-11-evaluation]
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 240

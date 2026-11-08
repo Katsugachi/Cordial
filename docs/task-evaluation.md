@@ -174,3 +174,13 @@ In [run 42522006604](https://github.com/Katsugachi/Cordial/actions/runs/42522006
 the ordinary jobs passed. The crop experiment again returned all three correct
 PDF answers but failed with an unfinished checklist; both research worksheets
 exhausted the tool budget without substantive answers (seed 3867300949).
+[Run 42527009463](https://github.com/Katsugachi/Cordial/actions/runs/42527009463)
+tested the ordinary full-page PDF path and a three-generation research pause.
+The PDF gave 94.25 cm², rejected the rod despite calculating 47.17 cm, and
+used 512 cm³; its checklist was 0/3. Python output contained those same values,
+so the calculator executed the model's incorrect assumptions rather than fixing
+them. Architecture's arithmetic was correct but its checklist was unfinished;
+English exhausted the tool budget (seed 3872303808). Both real-model jobs failed,
+while ordinary jobs passed. The longer research-pause experiment was removed:
+it did not demonstrate improvement and would constrain legitimate research.
+Different seeds prevent a controlled causal comparison.
