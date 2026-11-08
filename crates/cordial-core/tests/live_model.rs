@@ -25,6 +25,35 @@ use cordial_core::tools::ToolRuntime;
 use cordial_core::{Agent, AgentConfig, ApprovalGate, ModelManager};
 use cordial_llama::SamplingParams;
 
+// Numeric token parsing for evaluation only. Whole tokens avoid accepting 161
+// merely because an answer contains 1610, while grouped currency is accepted.
+fn numeric_tokens(text: &str) -> Vec<f64> {
+    let regex = regex::Regex::new(r"[+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?").unwrap();
+    regex.find_iter(text).filter_map(|m| {
+        let before = text[..m.start()].chars().next_back();
+        let after = text[m.end()..].chars().next();
+        let before_prefix = &text[..m.start()];
+        let after_suffix = &text[m.end()..];
+        let joins_previous_number = before.is_some_and(|c| c.is_ascii_digit())
+            || (matches!(before, Some(',' | '.')) && before_prefix.chars().rev().nth(1).is_some_and(|c| c.is_ascii_digit()));
+        let joins_next_number = after.is_some_and(|c| c.is_ascii_digit())
+            || (matches!(after, Some(',' | '.')) && after_suffix.chars().nth(1).is_some_and(|c| c.is_ascii_digit()));
+        if joins_previous_number || joins_next_number { return None; }
+        m.as_str().replace(',', "").parse::<f64>().ok()
+    }).collect()
+}
+
+#[test]
+fn independent_numeric_checker_uses_whole_signed_values() {
+    let tokens = numeric_tokens("Area 425 m², 187 packs, $8,976. A wrong -161 and 1610.");
+    assert!(tokens.contains(&425.0));
+    assert!(tokens.contains(&187.0));
+    assert!(tokens.contains(&8976.0));
+    assert!(!tokens.contains(&161.0));
+    assert!(numeric_tokens("75.398223686 47.17 98.534").contains(&98.534));
+    assert!(!numeric_tokens("invalid 1,23 and 2.3.4").contains(&23.0));
+}
+
 struct Live {
     backend: Backend,
     runtime: ToolRuntime,
@@ -512,10 +541,10 @@ async fn research_worksheets_architecture_and_english() {
     assert!(
         arch.contains("utzon")
             && arch.contains("1973")
-            && arch.contains(&area.to_string())
-            && arch.contains(&(2 * (length + width)).to_string())
-            && arch.contains(&packs.to_string())
-            && arch.contains(&cost.to_string()),
+            && numeric_tokens(&arch).contains(&(area as f64))
+            && numeric_tokens(&arch).contains(&((2 * (length + width)) as f64))
+            && numeric_tokens(&arch).contains(&(packs as f64))
+            && numeric_tokens(&arch).contains(&(cost as f64)),
         "architecture answers did not match the independent key"
     );
     let eng = english_answer.to_lowercase();
@@ -697,6 +726,18 @@ async fn rendered_pdf_worksheet_end_to_end() {
             }),
         "Python was not successfully executed"
     );
+    // A successful but unrelated calculation is not evidence that the
+    // worksheet calculations were run. Require the three independently
+    // computed values in successful Python outputs, with rounding tolerance.
+    let python_values: Vec<f64> = session.messages.iter()
+        .filter(|message| message.tool_status == Some(cordial_core::session::ToolResultStatus::Ok))
+        .filter(|message| session.messages.iter().flat_map(|m| &m.tool_calls).any(|call|
+            call.name == "python_calculate" && message.tool_call_id.as_deref() == Some(call.id.as_str())))
+        .flat_map(|message| numeric_tokens(&message.content)).collect();
+    for (expected, tolerance) in [(75.39822368615503, 0.005), (47.16990566028302, 0.005), (98.53444594169618, 0.0005)] {
+        assert!(python_values.iter().any(|actual| (actual - expected).abs() < tolerance),
+            "successful Python output did not contain independently expected value {expected}: {python_values:?}");
+    }
     assert!(
         !leftover_scripts,
         "a temporary Python script was left behind"

@@ -162,4 +162,8 @@ evaluation still failed: English exhausted its tool budget, and architecture
 marked its checklist done while giving 2 packs/$96 instead of 238 packs/$11,424
 (seed 3837161840). The ordinary Rust, UI, desktop, sandbox and inference checks
 passed. Search availability does not make model reasoning or progress reports
-reliable.
+reliable. The evaluation now matches whole numeric values (including grouped
+currency) rather than numeric substrings and requires successful Python output
+to contain the independently calculated values for all three PDF questions.
+This conservative check can reject a correct calculation presented only as an
+expression or boolean; it does not establish semantic correctness of an answer.
