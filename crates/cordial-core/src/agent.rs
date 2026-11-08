@@ -269,7 +269,11 @@ impl<'a> Agent<'a> {
             // context, not in the system prompt or durable transcript. This
             // lets it reconcile progress against the actual work it just wrote.
             let draft_id = task_draft.as_ref().map(|draft| {
-                let message = Message::assistant(format!("Unverified working draft, not a final answer:\n{draft}"), None, vec![]);
+                let message = Message::assistant(
+                    format!("Unverified working draft, not a final answer:\n{draft}"),
+                    None,
+                    vec![],
+                );
                 let id = message.id.clone();
                 session.messages.push(message);
                 id
@@ -496,7 +500,10 @@ impl<'a> Agent<'a> {
                     let detail = "Only one tool call may run per response. This call was not executed; review the first result before requesting another action.";
                     let mut result = Message::tool_result(call.id.clone(), detail);
                     result.tool_status = Some(ToolResultStatus::Failed);
-                    self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.clone(), message: result.clone() });
+                    self.events.emit(AgentEvent::ToolMessage {
+                        turn_id: turn_id.clone(),
+                        message: result.clone(),
+                    });
                     session.push(result);
                     self.checkpoint(session);
                     retry_instruction = "Issue one tool call at a time and wait for its result before requesting another action.";

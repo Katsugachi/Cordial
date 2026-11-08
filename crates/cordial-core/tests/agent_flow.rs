@@ -274,13 +274,25 @@ async fn batched_calls_only_execute_the_first_action() {
         "<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>",
         "<tool_call><function=write_file><parameter=path>unexpected.txt</parameter><parameter=content>unsafe</parameter></function></tool_call>"
     );
-    let (result, events) = run_turn(&fixture, vec![batch, "I read the notes."],
-        config(Effort::Medium, PermissionMode::Auto), &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![batch, "I read the notes."],
+        config(Effort::Medium, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(!fixture.workspace.join("unexpected.txt").exists());
-    assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")));
-    assert!(!events.iter().any(|event| matches!(event, AgentEvent::ToolCallStarted { name, .. } if name == "write_file")));
-    assert!(session.messages.iter().any(|m| m.role == Role::Tool && m.tool_status == Some(ToolResultStatus::Failed) && m.content.contains("not executed")));
+    assert!(events.iter().any(
+        |event| matches!(event, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")
+    ));
+    assert!(!events.iter().any(
+        |event| matches!(event, AgentEvent::ToolCallStarted { name, .. } if name == "write_file")
+    ));
+    assert!(session.messages.iter().any(|m| m.role == Role::Tool
+        && m.tool_status == Some(ToolResultStatus::Failed)
+        && m.content.contains("not executed")));
 }
 
 #[tokio::test]
@@ -670,23 +682,57 @@ async fn task_reconciliation_sees_unpublished_draft_without_persisting_it() {
     let runtime = fixture.runtime(Effort::Task);
     let initial = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Answer","status":"running"}]</parameter></function></tool_call>"#;
     let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Answer","status":"done"}]</parameter></function></tool_call>"#;
-    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![initial, "Draft evidence says Friday.", done, "The final answer is Friday."]));
+    let mut backend = Backend::Scripted(ScriptedBackend::new(vec![
+        initial,
+        "Draft evidence says Friday.",
+        done,
+        "The final answer is Friday.",
+    ]));
     let gate = ApprovalGate::new();
     let mut policy = PermissionPolicy::new(PermissionMode::Auto);
     let (sink, _receiver) = EventSink::channel();
     let mut session = Session::new();
-    let mut agent = Agent { backend: &mut backend, tools: &runtime, policy: &mut policy, approvals: &gate,
-        events: &sink, config: config(Effort::Task, PermissionMode::Auto), store: None };
-    let result = agent.run(&mut session, "Answer from the notes".into(), vec![]).await.unwrap();
+    let mut agent = Agent {
+        backend: &mut backend,
+        tools: &runtime,
+        policy: &mut policy,
+        approvals: &gate,
+        events: &sink,
+        config: config(Effort::Task, PermissionMode::Auto),
+        store: None,
+    };
+    let result = agent
+        .run(&mut session, "Answer from the notes".into(), vec![])
+        .await
+        .unwrap();
     drop(agent);
     assert_eq!(result.stop, StopReason::Answered);
-    assert!(session.plan.iter().all(|step| step.status == cordial_core::session::PlanStatus::Done));
-    assert!(!session.messages.iter().any(|message| message.content.contains("Draft evidence says Friday.")));
-    assert!(session.messages.last().unwrap().content.contains("The final answer is Friday."));
-    let Backend::Scripted(scripted) = &backend else { panic!("expected scripted backend") };
-    assert!(scripted.requests[2].prompt.contains("Unverified working draft"));
-    assert!(scripted.requests[2].prompt.contains("Draft evidence says Friday."));
-    assert!(scripted.requests[2].prompt.contains("draft is not proof of correctness"));
+    assert!(session
+        .plan
+        .iter()
+        .all(|step| step.status == cordial_core::session::PlanStatus::Done));
+    assert!(!session
+        .messages
+        .iter()
+        .any(|message| message.content.contains("Draft evidence says Friday.")));
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("The final answer is Friday."));
+    let Backend::Scripted(scripted) = &backend else {
+        panic!("expected scripted backend")
+    };
+    assert!(scripted.requests[2]
+        .prompt
+        .contains("Unverified working draft"));
+    assert!(scripted.requests[2]
+        .prompt
+        .contains("Draft evidence says Friday."));
+    assert!(scripted.requests[2]
+        .prompt
+        .contains("draft is not proof of correctness"));
 }
 
 #[tokio::test]
