@@ -130,6 +130,8 @@ describe("permissions", () => {
     });
     state = applyEvent(state, { type: "tool_call_denied", turn_id: turnId, call_id: "c2", name: "read_file" });
     expect(state.turn?.tools[0].status).toBe("denied");
+    state = applyEvent(state, { type: "tool_call_finished", turn_id: turnId, call_id: "c3", name: "read_file", ok: false, summary: "failed", detail: "Error", thumbnail: null });
+    expect(state.turn?.tools.find(tool => tool.id === "c3")?.status).toBe("failed");
   });
 });
 

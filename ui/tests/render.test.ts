@@ -119,6 +119,34 @@ describe("chat view", () => {
     expect(html).not.toContain('data-status="running"');
   });
 
+  it("keeps a recovered unknown tool outcome visibly interrupted", () => {
+    const assistant: Message = {
+      id: "a1", role: "assistant", content: "", thinking: null, attachments: [], created_at: 1,
+      tool_calls: [{ id: "c1", name: "write_file", arguments: [] }],
+    };
+    const tool: Message = {
+      id: "t1", role: "tool", content: "The previous tool call was interrupted. Its outcome is unknown; check before retrying.",
+      tool_calls: [], tool_call_id: "c1", tool_status: "interrupted", attachments: [], created_at: 2,
+    };
+    const html = chatHtml({ ...initialState(), session: sessionWith([userMessage, assistant, tool]), busy: false });
+    expect(html).toContain('data-status="interrupted"');
+    expect(html).toContain("outcome is unknown");
+    expect(html).not.toContain('data-status="done"');
+  });
+
+  it("distinguishes failed, denied and successful persisted tool results", () => {
+    const assistant: Message = { id: "a", role: "assistant", content: "", attachments: [], created_at: 1,
+      tool_calls: ["failed", "denied", "ok"].map(id => ({ id, name: "read_file", arguments: [] })) };
+    const results: Message[] = (["failed", "denied", "ok"] as const).map((status, index) => ({
+      id: `t${index}`, role: "tool", content: "Result", tool_calls: [], tool_call_id: status,
+      tool_status: status, attachments: [], created_at: 2,
+    }));
+    const html = chatHtml({ ...initialState(), session: sessionWith([userMessage, assistant, ...results]) });
+    expect(html).toContain('data-status="failed"');
+    expect(html).toContain('data-status="denied"');
+    expect(html).toContain('data-status="done"');
+  });
+
   it("shows the approval banner with both choices", () => {
     const state = {
       ...initialState(),

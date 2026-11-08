@@ -657,6 +657,7 @@ svg {
 }
 
 .tool-card[data-status="denied"],
+.tool-card[data-status="failed"],
 .tool-card[data-status="interrupted"] {
   background: var(--paper);
   border: 1px solid var(--rule-strong);

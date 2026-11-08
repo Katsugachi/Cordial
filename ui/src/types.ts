@@ -69,6 +69,7 @@ export interface Message {
   thinking?: string | null;
   tool_calls: ToolCall[];
   tool_call_id?: string | null;
+  tool_status?: "ok" | "failed" | "denied" | "interrupted" | null;
   attachments: Attachment[];
   created_at: number;
 }

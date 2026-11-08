@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<ToolView["status"], string> = {
   running: "Running",
   awaiting: "Waiting for you",
   done: "Done",
+  failed: "Failed",
   denied: "Declined",
   interrupted: "Interrupted",
 };
@@ -103,13 +104,21 @@ function toolsForCall(state: AppState, message: Message): ToolView[] {
     const result = state.session?.messages.find(
       (candidate) => candidate.role === "tool" && candidate.tool_call_id === call.id,
     );
-    const denied = result?.content.startsWith("The user declined") ?? false;
+    // New transcripts persist a structured outcome. Older ones lack it; use
+    // only the explicit interruption/denial markers for backwards compatibility.
+    const status = result?.tool_status === "interrupted" ? "interrupted"
+      : result?.tool_status === "denied" ? "denied"
+      : result?.tool_status === "failed" ? "failed"
+      : result?.tool_status === "ok" ? "done"
+      : result?.content.startsWith("The user declined") ? "denied"
+      : result?.content.startsWith("The previous tool call was interrupted.") ? "interrupted"
+      : result ? "done" : state.busy ? "running" : "interrupted";
     return {
       id: call.id,
       name: call.name,
       preview: call.arguments.map((argument) => `${argument.name}=${argument.value}`).join(", "),
       risk: "",
-      status: result ? (denied ? "denied" : "done") : state.busy ? "running" : "interrupted",
+      status,
       summary: result ? excerpt(result.content, 160) : "",
       detail: result ? result.content : "",
       thumbnail: null,

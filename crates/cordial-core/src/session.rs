@@ -89,6 +89,16 @@ impl ToolCall {
     }
 }
 
+/// Persisted outcome for a tool result. Older sessions may not contain one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolResultStatus {
+    Ok,
+    Failed,
+    Denied,
+    Interrupted,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
@@ -100,6 +110,8 @@ pub struct Message {
     pub tool_calls: Vec<ToolCall>,
     #[serde(default)]
     pub tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_status: Option<ToolResultStatus>,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
     pub created_at: i64,
@@ -114,6 +126,7 @@ impl Message {
             thinking: None,
             tool_calls: Vec::new(),
             tool_call_id: None,
+            tool_status: None,
             attachments,
             created_at: now_ms(),
         }
@@ -131,6 +144,7 @@ impl Message {
             thinking,
             tool_calls,
             tool_call_id: None,
+            tool_status: None,
             attachments: Vec::new(),
             created_at: now_ms(),
         }
@@ -144,6 +158,7 @@ impl Message {
             thinking: None,
             tool_calls: Vec::new(),
             tool_call_id: Some(tool_call_id.into()),
+            tool_status: None,
             attachments: Vec::new(),
             created_at: now_ms(),
         }
@@ -353,6 +368,18 @@ impl SessionStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_status_round_trips_and_old_messages_load_without_it() {
+        let mut message = Message::tool_result("call", "result");
+        message.tool_status = Some(ToolResultStatus::Failed);
+        let value = serde_json::to_value(&message).unwrap();
+        assert_eq!(value["tool_status"], "failed");
+        assert_eq!(serde_json::from_value::<Message>(value.clone()).unwrap(), message);
+        let mut legacy = value;
+        legacy.as_object_mut().unwrap().remove("tool_status");
+        assert_eq!(serde_json::from_value::<Message>(legacy).unwrap().tool_status, None);
+    }
 
     #[test]
     fn titles_are_single_line_and_short() {

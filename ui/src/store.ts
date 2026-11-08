@@ -22,7 +22,7 @@ export interface ToolView {
   name: string;
   preview: string;
   risk: string;
-  status: "running" | "awaiting" | "done" | "denied" | "interrupted";
+  status: "running" | "awaiting" | "done" | "failed" | "denied" | "interrupted";
   summary: string;
   detail: string;
   thumbnail: string | null;
@@ -228,7 +228,7 @@ export function applyEvent(state: AppState, event: AgentEvent): AppState {
           ...state.turn,
           tools: upsertTool(state.turn.tools, event.call_id, {
             name: event.name,
-            status: event.ok ? "done" : "denied",
+            status: event.ok ? "done" : "failed",
             summary: event.summary,
             detail: event.detail,
             thumbnail: event.thumbnail ?? null,

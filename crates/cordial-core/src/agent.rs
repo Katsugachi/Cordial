@@ -22,7 +22,7 @@ use crate::prompt::{self, PromptOptions, DEFAULT_MEDIA_MARKER};
 use crate::protocol::parse_reply;
 use crate::session::{
     Attachment, AttachmentKind, Message, PlanStatus, PlanStep, Role, Session, SessionStore,
-    ToolCall,
+    ToolCall, ToolResultStatus,
 };
 use crate::settings::{Effort, PermissionMode, Settings};
 use crate::tools::{self, ToolRuntime, ToolSpec};
@@ -474,7 +474,8 @@ impl<'a> Agent<'a> {
                     } else {
                         "Error: this tool is not available."
                     };
-                    let result = Message::tool_result(call.id.clone(), message);
+                    let mut result = Message::tool_result(call.id.clone(), message);
+                    result.tool_status = Some(ToolResultStatus::Failed);
                     self.events.emit(AgentEvent::ToolMessage {
                         turn_id: turn_id.clone(),
                         message: result.clone(),
@@ -496,7 +497,8 @@ impl<'a> Agent<'a> {
                             detail: detail.to_string(),
                             thumbnail: None,
                         });
-                        let result = Message::tool_result(call.id.clone(), detail);
+                        let mut result = Message::tool_result(call.id.clone(), detail);
+                        result.tool_status = Some(ToolResultStatus::Failed);
                         self.events.emit(AgentEvent::ToolMessage {
                             turn_id: turn_id.clone(),
                             message: result.clone(),
@@ -700,10 +702,14 @@ impl<'a> Agent<'a> {
                     call_id: call.id.clone(),
                     name: call.name.clone(),
                 });
-                session.push(Message::tool_result(
+                let mut result = Message::tool_result(
                     call.id.clone(),
                     "The user declined this tool call. Do not try it again; answer with what you already have or ask what they would prefer.",
-                ));
+                );
+                result.tool_status = Some(ToolResultStatus::Denied);
+                self.events.emit(AgentEvent::ToolMessage { turn_id: turn_id.to_string(), message: result.clone() });
+                session.push(result);
+                self.checkpoint(session);
                 return false;
             }
             // Remember the decision for the rest of the session in auto mode;
@@ -743,6 +749,7 @@ impl<'a> Agent<'a> {
         });
 
         let mut message = Message::tool_result(call.id.clone(), outcome.text.clone());
+        message.tool_status = Some(if outcome.ok { ToolResultStatus::Ok } else { ToolResultStatus::Failed });
         message.attachments = outcome
             .media
             .iter()
@@ -981,7 +988,11 @@ fn recover_interrupted_calls(session: &Session) -> Vec<Message> {
     }
     assistant.tool_calls.iter().filter(|call| {
         !session.messages[index + 1..].iter().any(|message| message.tool_call_id.as_deref() == Some(call.id.as_str()))
-    }).map(|call| Message::tool_result(call.id.clone(), "The previous tool call was interrupted. Its outcome is unknown; do not assume it failed or repeat a write without checking the workspace and requesting any required approval.")).collect()
+    }).map(|call| {
+        let mut result = Message::tool_result(call.id.clone(), "The previous tool call was interrupted. Its outcome is unknown; do not assume it failed or repeat a write without checking the workspace and requesting any required approval.");
+        result.tool_status = Some(ToolResultStatus::Interrupted);
+        result
+    }).collect()
 }
 
 fn plan_all_done(session: &Session) -> bool {
