@@ -167,3 +167,10 @@ currency) rather than numeric substrings and requires successful Python output
 to contain the independently calculated values for all three PDF questions.
 This conservative check can reject a correct calculation presented only as an
 expression or boolean; it does not establish semantic correctness of an answer.
+The research check also requires the relevant factual terms to appear in
+successfully fetched, cited pages. Their presence alone does not prove that the
+pages support the claims or that the interpretation is correct.
+In [run 42522006604](https://github.com/Katsugachi/Cordial/actions/runs/42522006604),
+the ordinary jobs passed. The crop experiment again returned all three correct
+PDF answers but failed with an unfinished checklist; both research worksheets
+exhausted the tool budget without substantive answers (seed 3867300949).

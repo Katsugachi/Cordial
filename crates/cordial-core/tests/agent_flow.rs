@@ -895,7 +895,7 @@ async fn task_temporarily_pauses_research_to_allow_other_work() {
     assert!(session
         .messages
         .iter()
-        .any(|m| m.content.contains("Research is paused for this generation")));
+        .any(|m| m.content.contains("Research is temporarily paused")));
     assert!(session
         .messages
         .iter()
@@ -910,6 +910,26 @@ async fn task_temporarily_pauses_research_to_allow_other_work() {
         5
     );
     assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Pausing repeated research"))));
+}
+
+#[tokio::test]
+async fn research_pause_expires_even_without_other_tool_work() {
+    let fixture = Fixture::new("research-pause-expires");
+    let mut session = Session::new();
+    let plan = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"running"}]</parameter></function></tool_call>"#;
+    let a = r#"<tool_call><function=web_fetch><parameter=url>file://one</parameter></function></tool_call>"#;
+    let b = r#"<tool_call><function=web_fetch><parameter=url>file://two</parameter></function></tool_call>"#;
+    let c = r#"<tool_call><function=web_fetch><parameter=url>file://three</parameter></function></tool_call>"#;
+    let d = r#"<tool_call><function=web_fetch><parameter=url>file://four</parameter></function></tool_call>"#;
+    let blocked = r#"<tool_call><function=web_fetch><parameter=url>file://blocked</parameter></function></tool_call>"#;
+    let after = r#"<tool_call><function=web_fetch><parameter=url>file://after</parameter></function></tool_call>"#;
+    let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"done"}]</parameter></function></tool_call>"#;
+    let mut cfg = config(Effort::Task, PermissionMode::Auto);
+    cfg.web_enabled = true;
+    let (result, events) = run_turn(&fixture, vec![plan, a, b, c, d, blocked, blocked, blocked, after, done, "Done."], cfg, &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(session.messages.iter().filter(|m| m.content.contains("Research is temporarily paused")).count(), 3);
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")).count(), 5);
 }
 
 #[tokio::test]

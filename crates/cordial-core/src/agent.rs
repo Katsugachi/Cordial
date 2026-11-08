@@ -223,7 +223,7 @@ impl<'a> Agent<'a> {
         let mut planning_attempts = 0u32;
         let mut reconcile_next = false;
         let mut suppress_plan_next = false;
-        let mut suppress_research_next = false;
+        let mut research_pause_remaining = 0u8;
         let mut research_streak = 0u32;
         let mut unchanged_plan_updates = 0u32;
         let mut empty_task_retries = 0u32;
@@ -255,14 +255,14 @@ impl<'a> Agent<'a> {
             } else if suppress_plan_next {
                 tools_for_prompt.retain(|tool| tool.name != "update_plan");
             }
-            let research_paused = suppress_research_next;
+            let research_paused = research_pause_remaining > 0;
+            research_pause_remaining = research_pause_remaining.saturating_sub(1);
             if research_paused {
                 tools_for_prompt
                     .retain(|tool| tool.name != "web_search" && tool.name != "web_fetch");
             }
             reconcile_next = false;
             suppress_plan_next = false;
-            suppress_research_next = false;
             let output = match self
                 .generate_with_retry(
                     session,
@@ -487,7 +487,7 @@ impl<'a> Agent<'a> {
                     let message = if research_paused
                         && (call.name == "web_search" || call.name == "web_fetch")
                     {
-                        "Research is paused for this generation. Use the evidence already gathered to continue the task; research tools will be available again."
+                        "Research is temporarily paused. Use the evidence already gathered to continue the task; research tools will be available again after other work or a few generations."
                     } else {
                         "Error: this tool is not available."
                     };
@@ -536,7 +536,7 @@ impl<'a> Agent<'a> {
                         research_streak += 1;
                         if research_streak >= 4 {
                             research_streak = 0;
-                            suppress_research_next = true;
+                            research_pause_remaining = 3;
                             retry_instruction = "Use the evidence already gathered to work on the remaining task now. Cite the sources you actually opened, or clearly report missing evidence. You can research more later if needed.";
                             self.events.emit(AgentEvent::Notice {
                                 message: "Pausing repeated research briefly to continue the task."
@@ -545,6 +545,9 @@ impl<'a> Agent<'a> {
                         }
                     } else {
                         research_streak = 0;
+                        if ok && (call.name != "update_plan" || session.plan.iter().map(|step| step.status).collect::<Vec<_>>() != previous_statuses) {
+                            research_pause_remaining = 0;
+                        }
                     }
                 }
                 if self.config.effort == Effort::Task && call.name == "update_plan" && ok {

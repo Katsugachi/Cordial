@@ -69,6 +69,34 @@ fn independent_numeric_checker_uses_whole_signed_values() {
     assert!(!numeric_tokens("invalid 1,23 and 2.3.4").contains(&23.0));
 }
 
+// Only count text from successful, explicitly cited web_fetch results. This is
+// evidence of retrieval, not a proof that the page supports the model's claim.
+fn cited_source_text(session: &Session, answer: &str) -> String {
+    session.messages.iter().flat_map(|m| &m.tool_calls)
+        .filter(|call| call.name == "web_fetch" && call.arg("url").is_some_and(|url| answer.contains(url)))
+        .filter_map(|call| session.messages.iter().find(|message|
+            message.tool_call_id.as_deref() == Some(call.id.as_str())
+            && message.tool_status == Some(cordial_core::session::ToolResultStatus::Ok)
+            && message.content.starts_with("Text of ")))
+        .map(|message| message.content.to_lowercase())
+        .collect::<Vec<_>>().join("\n")
+}
+
+#[test]
+fn citation_evidence_requires_successful_cited_fetches() {
+    use cordial_core::session::{Message, ToolArgument, ToolCall, ToolResultStatus};
+    let mut session = Session::new();
+    let call = ToolCall { id: "fetch-1".into(), name: "web_fetch".into(), arguments: vec![ToolArgument { name: "url".into(), value: "https://example.org/a".into() }] };
+    session.push(Message::assistant("", None, vec![call]));
+    let mut result = Message::tool_result("fetch-1", "Text of https://example.org/a: Shakespeare, 1609");
+    result.tool_status = Some(ToolResultStatus::Failed);
+    session.push(result);
+    assert!(cited_source_text(&session, "https://example.org/a").is_empty());
+    session.messages.last_mut().unwrap().tool_status = Some(ToolResultStatus::Ok);
+    assert!(cited_source_text(&session, "no URL").is_empty());
+    assert!(cited_source_text(&session, "https://example.org/a").contains("shakespeare"));
+}
+
 struct Live {
     backend: Backend,
     runtime: ToolRuntime,
@@ -525,24 +553,11 @@ async fn research_worksheets_architecture_and_english() {
             calls.iter().any(|c| c == "web_search") && calls.iter().any(|c| c == "web_fetch"),
             "{label}: did not search and open a source"
         );
-        let cited_and_fetched = session
-            .messages
-            .iter()
-            .flat_map(|m| &m.tool_calls)
-            .filter(|c| c.name == "web_fetch")
-            .any(|call| {
-                call.arg("url").is_some_and(|url| {
-                    answer.contains(url)
-                        && session.messages.iter().any(|m| {
-                            m.tool_call_id.as_deref() == Some(call.id.as_str())
-                                && m.content.starts_with("Text of ")
-                        })
-                })
-            });
-        assert!(
-            cited_and_fetched,
-            "{label}: no cited source was successfully opened"
-        );
+        let evidence = cited_source_text(session, answer);
+        assert!(!evidence.is_empty(), "{label}: no cited source was successfully opened");
+        let required_terms = if label == "architecture" { ["utzon", "1973"] } else { ["shakespeare", "1609"] };
+        assert!(required_terms.iter().all(|term| evidence.contains(term)),
+            "{label}: cited and fetched sources did not contain the required factual terms");
         assert!(
             !session.plan.is_empty()
                 && session
@@ -686,6 +701,26 @@ async fn rendered_pdf_worksheet_end_to_end() {
             result.map(|message| &message.content)
         );
     }
+    // A successful but unrelated calculation is not evidence that the
+    // worksheet calculations were run. Require the three independently
+    // computed values in successful Python outputs, with rounding tolerance.
+    let python_values: Vec<f64> = session
+        .messages
+        .iter()
+        .filter(|message| message.tool_status == Some(cordial_core::session::ToolResultStatus::Ok))
+        .filter(|message| {
+            session
+                .messages
+                .iter()
+                .flat_map(|m| &m.tool_calls)
+                .any(|call| {
+                    call.name == "python_calculate"
+                        && message.tool_call_id.as_deref() == Some(call.id.as_str())
+                })
+        })
+        .flat_map(|message| numeric_tokens(&message.content))
+        .collect();
+    eprintln!("EVAL python values={python_values:?}");
     // Some models emit an extra reasoning terminator even in no-thinking mode;
     // do not count an intermediate draft as the final answer.
     let final_answer = answer.rsplit("</think>").next().unwrap_or(&answer);
@@ -741,25 +776,6 @@ async fn rendered_pdf_worksheet_end_to_end() {
             }),
         "Python was not successfully executed"
     );
-    // A successful but unrelated calculation is not evidence that the
-    // worksheet calculations were run. Require the three independently
-    // computed values in successful Python outputs, with rounding tolerance.
-    let python_values: Vec<f64> = session
-        .messages
-        .iter()
-        .filter(|message| message.tool_status == Some(cordial_core::session::ToolResultStatus::Ok))
-        .filter(|message| {
-            session
-                .messages
-                .iter()
-                .flat_map(|m| &m.tool_calls)
-                .any(|call| {
-                    call.name == "python_calculate"
-                        && message.tool_call_id.as_deref() == Some(call.id.as_str())
-                })
-        })
-        .flat_map(|message| numeric_tokens(&message.content))
-        .collect();
     for (expected, tolerance) in [
         (75.39822368615503, 0.005),
         (47.16990566028302, 0.005),
