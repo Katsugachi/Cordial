@@ -759,7 +759,12 @@ async fn task_bounds_repeated_fetches_without_stopping_early() {
         .unwrap()
         .content
         .contains("Task incomplete"));
-    assert!(session.messages.last().unwrap().content.contains("not independently verified"));
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("not independently verified"));
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, summary, .. } if name == "web_fetch" && summary != "skipped repeated fetch")).count(), 2);
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { summary, .. } if summary == "skipped repeated fetch")).count(), 2);
 }
@@ -885,10 +890,9 @@ async fn empty_task_responses_are_retried_but_bounded() {
     .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Retrying an empty task response"))));
-    assert!(session
-        .messages
-        .iter()
-        .any(|m| m.role == Role::Assistant && m.content.starts_with("Final answer.") && m.content.contains("not independently verified")));
+    assert!(session.messages.iter().any(|m| m.role == Role::Assistant
+        && m.content.starts_with("Final answer.")
+        && m.content.contains("not independently verified")));
 
     let mut session = Session::new();
     let (result, _) = run_turn(
