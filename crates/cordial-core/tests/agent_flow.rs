@@ -759,6 +759,7 @@ async fn task_bounds_repeated_fetches_without_stopping_early() {
         .unwrap()
         .content
         .contains("Task incomplete"));
+    assert!(session.messages.last().unwrap().content.contains("not independently verified"));
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, summary, .. } if name == "web_fetch" && summary != "skipped repeated fetch")).count(), 2);
     assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { summary, .. } if summary == "skipped repeated fetch")).count(), 2);
 }
@@ -887,7 +888,7 @@ async fn empty_task_responses_are_retried_but_bounded() {
     assert!(session
         .messages
         .iter()
-        .any(|m| m.role == Role::Assistant && m.content == "Final answer."));
+        .any(|m| m.role == Role::Assistant && m.content.starts_with("Final answer.") && m.content.contains("not independently verified")));
 
     let mut session = Session::new();
     let (result, _) = run_turn(
@@ -942,7 +943,8 @@ async fn truncated_task_answer_retries_and_never_claims_completion() {
         if expected == StopReason::Failed {
             assert!(answer.starts_with("Task incomplete: the response was cut off"));
         } else {
-            assert_eq!(answer, "Complete answer.");
+            assert!(answer.starts_with("Complete answer."));
+            assert!(answer.contains("not independently verified"));
         }
     }
 }

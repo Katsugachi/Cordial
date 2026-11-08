@@ -93,4 +93,10 @@ summarizing; the expected area was 399, perimeter 80, 176 packs and $8448.
 English again mistook figurative images for missing pictures, omitted its source
 URL and left the checklist unfinished. The PDF run again used Python but gave
 245.04 cm², said the rod would not fit, and gave 512 cm³; its checklist was
-1/3. These results remain failures even though some tools succeeded.
+1/3. In run 42445169265 (seed 3790463610), architecture cited its source and
+marked its checklist complete, but gave 2 packs/$96 instead of 155 packs/$7440
+for area 351 and perimeter 80. English exhausted its budget and invented
+attributions for the examples. The PDF answer correctly said the rod fits but
+mangled the calculation, gave the wrong cone area and treated the cube diagonal
+as an edge; its checklist was 1/3. These results remain failures even though
+some tools succeeded.

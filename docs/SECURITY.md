@@ -123,7 +123,8 @@ llama.cpp runs in-process; there is no inference server listening on a port.
 
 ## Task mode limitations
 
-Task mode is experimental. The checklist reflects the model’s own reports and is
+Task mode is experimental. Completed and partial Task answers carry a reminder to
+check results independently. The checklist reflects the model’s own reports and is
 not proof of correctness. Work stops when the app exits, when its budget runs
 out, or when the model fails; checkpointing does not automatically resume it.
 DOCX support handles a bounded subset of WordprocessingML, not all document

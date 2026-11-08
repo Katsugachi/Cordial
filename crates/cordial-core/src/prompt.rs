@@ -287,7 +287,7 @@ pub fn system_prompt(
     prompt.push_str("Answering\n");
     if effort == crate::settings::Effort::Task {
         prompt.push_str("- Address every part of the task. Show the requested reasoning and verification; use as much space as needed. Avoid filler.\n");
-        prompt.push_str("- Resolve references using the supplied material: a literary image can mean figurative wording, not a picture. For diagrams, distinguish labeled edges, heights and diagonals before choosing formulas. Check comparisons and units.\n");
+        prompt.push_str("- Resolve references using the supplied material: a literary image can mean figurative wording, not a picture. Do not invent authors or sources for example sentences. For diagrams, distinguish labeled edges, heights and diagonals before choosing formulas. Check comparisons and units.\n");
     } else {
         prompt.push_str("- Lead with the answer, then at most three short paragraphs of support. No preamble, no restating the question, no filler.\n");
     }

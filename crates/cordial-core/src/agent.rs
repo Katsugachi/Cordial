@@ -325,10 +325,10 @@ impl<'a> Agent<'a> {
                     });
                     continue;
                 }
-                let content = format!(
+                let content = task_verification_notice(format!(
                     "Task incomplete: the response was cut off by the output limit.\n\n{}",
                     parsed.content
-                );
+                ));
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -408,8 +408,13 @@ impl<'a> Agent<'a> {
                     }
                     break StopReason::EmptyAnswer;
                 }
-                let content = if self.config.effort == Effort::Task && !plan_all_done(session) {
-                    format!("Task incomplete: the checklist has unfinished or blocked steps, or was not created.\n\n{}", parsed.content)
+                let content = if self.config.effort == Effort::Task {
+                    let answer = if !plan_all_done(session) {
+                        format!("Task incomplete: the checklist has unfinished or blocked steps, or was not created.\n\n{}", parsed.content)
+                    } else {
+                        parsed.content
+                    };
+                    task_verification_notice(answer)
                 } else {
                     parsed.content
                 };
@@ -574,8 +579,13 @@ impl<'a> Agent<'a> {
                 } else {
                     parsed.content
                 };
-                let content = if self.config.effort == Effort::Task && !plan_all_done(session) {
-                    format!("Task incomplete: the tool budget was reached before all checklist steps were done.\n\n{content}")
+                let content = if self.config.effort == Effort::Task {
+                    let answer = if !plan_all_done(session) {
+                        format!("Task incomplete: the tool budget was reached before all checklist steps were done.\n\n{content}")
+                    } else {
+                        content
+                    };
+                    task_verification_notice(answer)
                 } else {
                     content
                 };
@@ -854,6 +864,9 @@ impl<'a> Agent<'a> {
         }
         if tools.iter().any(|tool| tool.name == "python_calculate") {
             system.push_str("\n\nFor Python calculations use python_calculate with code that prints results. It executes in memory without host files; do not save temporary scripts in the workspace. Check that the code implements the correct formula, use the actual returned values in your final answer, and verify that any inequalities support the conclusion.\n");
+            if self.config.effort == Effort::Task {
+                system.push_str("For multistep arithmetic, use python_calculate to print intermediate values, carry them into the next step, and check units and magnitude before reporting the answer.\n");
+            }
         }
         if !self.config.memory.trim().is_empty() {
             system.push_str(
@@ -944,6 +957,10 @@ fn plan_all_done(session: &Session) -> bool {
             .plan
             .iter()
             .all(|step| step.status == PlanStatus::Done)
+}
+
+fn task_verification_notice(answer: String) -> String {
+    format!("{answer}\n\nTask results and checklist are model-generated, not independently verified. Check calculations, sources and file changes before relying on them.")
 }
 
 fn plan_complete(session: &Session) -> bool {
