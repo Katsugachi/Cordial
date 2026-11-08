@@ -688,11 +688,43 @@ async fn task_temporarily_pauses_research_to_allow_other_work() {
     let done = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Research","status":"done"}]</parameter></function></tool_call>"#;
     let mut cfg = config(Effort::Task, PermissionMode::Auto);
     cfg.web_enabled = true;
-    let (result, events) = run_turn(&fixture, vec![plan, fetch1, fetch2, fetch3, fetch4, fetch5, read, fetch6, done, "The notes say Friday."], cfg, &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![
+            plan,
+            fetch1,
+            fetch2,
+            fetch3,
+            fetch4,
+            fetch5,
+            read,
+            fetch6,
+            done,
+            "The notes say Friday.",
+        ],
+        cfg,
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
-    assert!(session.messages.iter().any(|m| m.content.contains("Research is paused for this generation")));
-    assert!(session.messages.iter().any(|m| m.content.contains("The plan is to ship on Friday")));
-    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")).count(), 5);
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.content.contains("Research is paused for this generation")));
+    assert!(session
+        .messages
+        .iter()
+        .any(|m| m.content.contains("The plan is to ship on Friday")));
+    assert_eq!(
+        events
+            .iter()
+            .filter(
+                |e| matches!(e, AgentEvent::ToolCallFinished { name, .. } if name == "web_fetch")
+            )
+            .count(),
+        5
+    );
     assert!(events.iter().any(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Pausing repeated research"))));
 }
 

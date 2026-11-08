@@ -241,7 +241,8 @@ impl<'a> Agent<'a> {
             }
             let research_paused = suppress_research_next;
             if research_paused {
-                tools_for_prompt.retain(|tool| tool.name != "web_search" && tool.name != "web_fetch");
+                tools_for_prompt
+                    .retain(|tool| tool.name != "web_search" && tool.name != "web_fetch");
             }
             reconcile_next = false;
             suppress_plan_next = false;
@@ -446,7 +447,9 @@ impl<'a> Agent<'a> {
 
             for call in &calls {
                 if !tools_for_prompt.iter().any(|tool| tool.name == call.name) {
-                    let message = if research_paused && (call.name == "web_search" || call.name == "web_fetch") {
+                    let message = if research_paused
+                        && (call.name == "web_search" || call.name == "web_fetch")
+                    {
                         "Research is paused for this generation. Use the evidence already gathered to continue the task; research tools will be available again."
                     } else {
                         "Error: this tool is not available."
@@ -493,7 +496,10 @@ impl<'a> Agent<'a> {
                             research_streak = 0;
                             suppress_research_next = true;
                             retry_instruction = "Use the evidence already gathered to work on the remaining task now. Cite the sources you actually opened, or clearly report missing evidence. You can research more later if needed.";
-                            self.events.emit(AgentEvent::Notice { message: "Pausing repeated research briefly to continue the task.".to_string() });
+                            self.events.emit(AgentEvent::Notice {
+                                message: "Pausing repeated research briefly to continue the task."
+                                    .to_string(),
+                            });
                         }
                     } else {
                         research_streak = 0;
