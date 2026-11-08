@@ -38,8 +38,8 @@ restricted networks.
   is available only in an [experimental build](docs/python-sandbox.md).
 - **Adjusts effort.** Low / Medium / High cap tool rounds, output tokens and page
   reads. Low effort also switches reasoning off.
-- **Runs offline.** No telemetry, no analytics, no accounts. Nothing leaves the
-  machine unless a web tool is called.
+- **Runs locally.** No telemetry, analytics or accounts. The model is downloaded
+  on first launch. When enabled, web tools can send requests to external sites.
 
 
 ## Install

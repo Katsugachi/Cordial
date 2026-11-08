@@ -219,9 +219,6 @@ impl<'a> Agent<'a> {
         let mut retried_without_thinking = false;
         let mut repaired_tool_call = false;
         let mut retry_instruction = "";
-        // Retain a bounded, unverified candidate only as temporary model
-        // context while reconciling the checklist; never publish it as final.
-        let mut task_draft: Option<String> = None;
         let mut plan_nudges = 0u32;
         let mut planning_attempts = 0u32;
         let mut reconcile_next = false;
@@ -265,20 +262,7 @@ impl<'a> Agent<'a> {
             reconcile_next = false;
             suppress_plan_next = false;
             suppress_research_next = false;
-            // Keep the model's unverified draft in its own assistant-role
-            // context, not in the system prompt or durable transcript. This
-            // lets it reconcile progress against the actual work it just wrote.
-            let draft_id = task_draft.as_ref().map(|draft| {
-                let message = Message::assistant(
-                    format!("Unverified working draft, not a final answer:\n{draft}"),
-                    None,
-                    vec![],
-                );
-                let id = message.id.clone();
-                session.messages.push(message);
-                id
-            });
-            let generated = self
+            let output = match self
                 .generate_with_retry(
                     session,
                     &turn_id,
@@ -287,11 +271,8 @@ impl<'a> Agent<'a> {
                     thinking,
                     &mut tool_context,
                 )
-                .await;
-            if let Some(id) = draft_id {
-                session.messages.retain(|message| message.id != id);
-            }
-            let output = match generated {
+                .await
+            {
                 Ok(output) => output,
                 Err(err) => {
                     self.events.emit(AgentEvent::Error {
@@ -396,13 +377,10 @@ impl<'a> Agent<'a> {
                 {
                     plan_nudges += 1;
                     reconcile_next = !session.plan.is_empty();
-                    if reconcile_next && !parsed.content.trim().is_empty() {
-                        task_draft = Some(truncate_chars(parsed.content.trim(), 4_000));
-                    }
                     retry_instruction = if session.plan.is_empty() {
                         "First create a checklist using this exact tool format, changing the titles to fit the request: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet."
                     } else {
-                        "Review the tool results, the unverified working draft if present, and the current checklist. The draft is not proof of correctness. Call update_plan now with every checklist step and its current status. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
+                        "Review the tool results and the current checklist. Call update_plan now with every existing step and its current status. Format example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Example step\",\"status\":\"pending\"}]</parameter></function></tool_call>. Replace the example with all current step titles. Use done only for work already verified, blocked with a note for work you cannot do, and pending for unfinished work. Do not give a final answer yet."
                     };
                     self.events.emit(AgentEvent::GenerationReset {
                         turn_id: turn_id.clone(),
@@ -471,11 +449,6 @@ impl<'a> Agent<'a> {
                 .enumerate()
                 .map(|(index, call)| call.into_call(format!("{turn_id}-{rounds}-{index}")))
                 .collect();
-
-            if calls.iter().any(|call| call.name != "update_plan") {
-                // New work can invalidate the earlier draft.
-                task_draft = None;
-            }
 
             if let Some(reason) = parsed.malformed {
                 self.events.emit(AgentEvent::Notice {

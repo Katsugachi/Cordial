@@ -125,4 +125,13 @@ diagonal as an edge and left all steps unfinished. In run 42460929795 (seed
 unfinished. English marked its plan complete despite identifying the figures
 of speech incorrectly, treating figurative images as missing pictures and not
 citing a source URL. The PDF attempt correctly calculated the rod fit but gave
-94.25 cm² for the cone and 512 cm³ for the cube; its checklist was 1/3.
+94.25 cm² for the cone and 512 cm³ for the cube; its checklist was 1/3. In
+run 42474756716 (seed 3820051061), architecture gave the independently checked
+area 297, perimeter 76, 131 packs and $6288 and completed its plan. English had
+no plan, misidentified the figurative images, and gave the wrong publication
+year, so the combined research evaluation failed. The same run repeated the visual
+region experiment at seed 3792486779 after adding temporary draft context for
+checklist reconciliation. The model still left the checklist 0/3 and changed the
+cone answer from the earlier correct 75.40 cm² to 103.67 cm², while retaining
+the correct rod and cube results. The draft-context change was removed after
+this regression. A single comparison does not establish its cause.
