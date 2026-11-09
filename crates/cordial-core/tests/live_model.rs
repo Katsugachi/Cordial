@@ -69,6 +69,38 @@ fn independent_numeric_checker_uses_whole_signed_values() {
     assert!(!numeric_tokens("invalid 1,23 and 2.3.4").contains(&23.0));
 }
 
+// A conservative association check, not a semantic grader. It rejects answers
+// that merely mention the right terms far apart, but can reject long explanations.
+fn mentions_near(text: &str, left: &str, right: &str, max_bytes: usize) -> bool {
+    text.match_indices(left).any(|(a, _)| text.match_indices(right).any(|(b, _)| a.abs_diff(b) <= max_bytes))
+}
+
+#[test]
+fn literary_terms_must_be_near_their_subjects() {
+    assert!(mentions_near("the clock shows personification", "clock", "personification", 40));
+    assert!(mentions_near("personification is used for the clock", "clock", "personification", 40));
+    assert!(!mentions_near(&format!("clock {} personification", "x".repeat(100)), "clock", "personification", 40));
+    assert!(!mentions_near("clock metaphor", "clock", "personification", 40));
+}
+
+// Fixed, independently keyed variants keep evaluations reproducible while
+// changing the examples that the model sees between runs.
+fn english_examples(seed: u64) -> (&'static str, &'static str, &'static str, &'static str) {
+    if seed % 2 == 0 {
+        ("The wind whispered secrets to the street", "wind",
+         "The library was a lighthouse in the storm", "library")
+    } else {
+        ("The clock complained about the late hour", "clock",
+         "The classroom was a beehive of activity", "classroom")
+    }
+}
+
+#[test]
+fn english_evaluation_varies_examples_reproducibly() {
+    assert_eq!(english_examples(4), english_examples(6));
+    assert_ne!(english_examples(4), english_examples(5));
+}
+
 // Only count text from successful, explicitly cited web_fetch results. This is
 // evidence of retrieval, not a proof that the page supports the model's claim.
 fn cited_source_text(session: &Session, answer: &str) -> String {
@@ -531,7 +563,12 @@ async fn research_worksheets_architecture_and_english() {
     // Keep this a finite evaluation even if the model gets stuck; normal Task
     // mode retains its larger budget.
     live.max_tool_rounds_override = Some(20);
-    let seed = uuid::Uuid::new_v4().as_u128();
+    let seed = match std::env::var("CORDIAL_LIVE_SEED") {
+        Ok(value) => value.parse::<u64>().expect("CORDIAL_LIVE_SEED must be an unsigned integer"),
+        Err(std::env::VarError::NotPresent) => uuid::Uuid::new_v4().as_u128() as u64,
+        Err(error) => panic!("invalid CORDIAL_LIVE_SEED: {error}"),
+    };
+    eprintln!("EVAL research fixture seed={seed}");
     let width = 10 + seed % 11;
     let length = 18 + (seed / 11) % 13;
     let area = length * width;
@@ -546,8 +583,10 @@ async fn research_worksheets_architecture_and_english() {
         "EVAL architecture interim answer={arch_answer:?}, plan={:?}",
         architecture.plan
     );
-    std::fs::write(live.workspace.join("english.txt"),
-        "English worksheet\n1. In the sentence 'The wind whispered secrets to the street', identify and explain the figure of speech and its effect.\n2. In 'The library was a lighthouse in the storm', identify and explain the figure of speech and its effect.\n3. Compare how the two images make an ordinary subject feel.\n4. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n").unwrap();
+    let (personification, person_subject, metaphor, metaphor_subject) = english_examples(seed);
+    std::fs::write(live.workspace.join("english.txt"), format!(
+        "English worksheet\n1. In the sentence '{personification}', identify and explain the figure of speech and its effect.\n2. In '{metaphor}', identify and explain the figure of speech and its effect.\n3. Compare how the two images make an ordinary subject feel.\n4. Research who wrote Sonnet 18 and the year it was first published. Cite a source.\n"
+    )).unwrap();
     let (english, english_answer) = live.turn(Effort::Task, true,
         "Complete every question in english.txt. Research factual claims, cite source URLs, and explain each answer.", vec![]).await;
     let names = |s: &Session| -> Vec<String> {
@@ -607,10 +646,8 @@ async fn research_worksheets_architecture_and_english() {
     );
     let eng = english_answer.to_lowercase();
     assert!(
-        eng.contains("personification")
-            && eng.contains("metaphor")
-            && eng.contains("wind")
-            && eng.contains("library")
+        mentions_near(&eng, person_subject, "personification", 280)
+            && mentions_near(&eng, metaphor_subject, "metaphor", 280)
             && eng.contains("shakespeare")
             && eng.contains("1609"),
         "English answers did not match the independent key"

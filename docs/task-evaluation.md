@@ -169,13 +169,27 @@ This conservative check can reject a correct calculation presented only as an
 expression or boolean; it does not establish semantic correctness of an answer.
 The research check also requires the relevant factual terms to appear in
 successfully fetched, cited pages. Their presence alone does not prove that the
-pages support the claims or that the interpretation is correct.
+pages support the claims or that the interpretation is correct. The English
+checker also requires the two literary labels near the corresponding subjects;
+this can reject a correct but lengthy explanation and cannot recognize every
+contradiction. Research fixtures
+now derive their dimensions and English example variant from the logged run seed
+(or log a generated seed when no seed is supplied), so failures can be replayed.
+The alternative examples test the same concepts and do not constitute a broad
+unseen-task benchmark.
 In [run 42522006604](https://github.com/Katsugachi/Cordial/actions/runs/42522006604),
 the ordinary jobs passed. The crop experiment again returned all three correct
 PDF answers but failed with an unfinished checklist; both research worksheets
 exhausted the tool budget without substantive answers (seed 3867300949). The
 `[pdf-random]` marker can vary the crop experiment's seed instead of reusing
-the fixed comparison seed; crops remain evaluation-only.
+the fixed comparison seed; crops remain evaluation-only. At varied seed
+3878959921, [run 42533665576](https://github.com/Katsugachi/Cordial/actions/runs/42533665576)
+returned a wrong cone area and rod conclusion, the correct cube volume, and a
+2/3 checklist whose completed steps included the wrong answers. The Python
+outputs were 245.04, 25 and 98.534. The PDF evaluation failed; a correct answer
+in earlier fixed-seed crop runs does not establish reliability. Both research
+worksheets in that run also exhausted their tool budgets without substantive
+answers; the ordinary jobs passed.
 [Run 42527009463](https://github.com/Katsugachi/Cordial/actions/runs/42527009463)
 tested the ordinary full-page PDF path and a three-generation research pause.
 The PDF gave 94.25 cm², rejected the rod despite calculating 47.17 cm, and
