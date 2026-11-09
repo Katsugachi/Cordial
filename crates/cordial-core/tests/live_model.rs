@@ -72,26 +72,57 @@ fn independent_numeric_checker_uses_whole_signed_values() {
 // A conservative association check, not a semantic grader. It rejects answers
 // that merely mention the right terms far apart, but can reject long explanations.
 fn mentions_near(text: &str, left: &str, right: &str, max_bytes: usize) -> bool {
-    text.match_indices(left).any(|(a, _)| text.match_indices(right).any(|(b, _)| a.abs_diff(b) <= max_bytes))
+    text.match_indices(left).any(|(a, _)| {
+        text.match_indices(right)
+            .any(|(b, _)| a.abs_diff(b) <= max_bytes)
+    })
 }
 
 #[test]
 fn literary_terms_must_be_near_their_subjects() {
-    assert!(mentions_near("the clock shows personification", "clock", "personification", 40));
-    assert!(mentions_near("personification is used for the clock", "clock", "personification", 40));
-    assert!(!mentions_near(&format!("clock {} personification", "x".repeat(100)), "clock", "personification", 40));
-    assert!(!mentions_near("clock metaphor", "clock", "personification", 40));
+    assert!(mentions_near(
+        "the clock shows personification",
+        "clock",
+        "personification",
+        40
+    ));
+    assert!(mentions_near(
+        "personification is used for the clock",
+        "clock",
+        "personification",
+        40
+    ));
+    assert!(!mentions_near(
+        &format!("clock {} personification", "x".repeat(100)),
+        "clock",
+        "personification",
+        40
+    ));
+    assert!(!mentions_near(
+        "clock metaphor",
+        "clock",
+        "personification",
+        40
+    ));
 }
 
 // Fixed, independently keyed variants keep evaluations reproducible while
 // changing the examples that the model sees between runs.
 fn english_examples(seed: u64) -> (&'static str, &'static str, &'static str, &'static str) {
     if seed % 2 == 0 {
-        ("The wind whispered secrets to the street", "wind",
-         "The library was a lighthouse in the storm", "library")
+        (
+            "The wind whispered secrets to the street",
+            "wind",
+            "The library was a lighthouse in the storm",
+            "library",
+        )
     } else {
-        ("The clock complained about the late hour", "clock",
-         "The classroom was a beehive of activity", "classroom")
+        (
+            "The clock complained about the late hour",
+            "clock",
+            "The classroom was a beehive of activity",
+            "classroom",
+        )
     }
 }
 
@@ -564,7 +595,9 @@ async fn research_worksheets_architecture_and_english() {
     // mode retains its larger budget.
     live.max_tool_rounds_override = Some(20);
     let seed = match std::env::var("CORDIAL_LIVE_SEED") {
-        Ok(value) => value.parse::<u64>().expect("CORDIAL_LIVE_SEED must be an unsigned integer"),
+        Ok(value) => value
+            .parse::<u64>()
+            .expect("CORDIAL_LIVE_SEED must be an unsigned integer"),
         Err(std::env::VarError::NotPresent) => uuid::Uuid::new_v4().as_u128() as u64,
         Err(error) => panic!("invalid CORDIAL_LIVE_SEED: {error}"),
     };
