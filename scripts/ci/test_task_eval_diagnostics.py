@@ -18,6 +18,16 @@ class DiagnosticsTest(unittest.TestCase):
             self.assertIn("EVAL python code=7", output)
             self.assertLessEqual(len(output.splitlines()), 9)
 
+    def test_segment_results_are_all_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "test.log"
+            log.write_text("".join(f"EVAL segment {i} answer=example\n" for i in range(1, 4)) +
+                           "thread 'case' panicked at test.rs:1\n")
+            output = subprocess.check_output(["python3", str(SCRIPT), str(log)], text=True)
+            for i in range(1, 4):
+                self.assertIn(f"EVAL segment {i} answer=example", output)
+            self.assertLessEqual(len(output.splitlines()), 9)
+
     def test_many_progress_events_do_not_hide_final_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "test.log"

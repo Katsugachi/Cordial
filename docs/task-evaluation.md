@@ -182,7 +182,10 @@ the ordinary jobs passed. The crop experiment again returned all three correct
 PDF answers but failed with an unfinished checklist; both research worksheets
 exhausted the tool budget without substantive answers (seed 3867300949). The
 `[pdf-random]` marker can vary the crop experiment's seed instead of reusing
-the fixed comparison seed; crops remain evaluation-only. At varied seed
+the fixed comparison seed; crops remain evaluation-only. The optional
+`[pdf-segments]` diagnostic additionally asks the model to solve each region in
+a separate fresh conversation. It is not an autonomous checklist or desktop
+end-to-end test and cannot qualify a release. At varied seed
 3878959921, [run 42533665576](https://github.com/Katsugachi/Cordial/actions/runs/42533665576)
 returned a wrong cone area and rod conclusion, the correct cube volume, and a
 2/3 checklist whose completed steps included the wrong answers. The Python
@@ -205,4 +208,9 @@ the ordinary jobs passed but both real-model jobs failed. At seed 3875467260,
 the PDF gave the correct cone and rod answers but treated the cube's diagonal as
 a side and returned 512 cm³; its checklist was 0/3. Successful Python output
 contained 75.40, 47.17 and 512, not the correct cube volume. Both research
-worksheets exhausted their tool budgets without substantive answers.
+worksheets exhausted their tool budgets without substantive answers. In
+[run 42539386735](https://github.com/Katsugachi/Cordial/actions/runs/42539386735),
+the full-page PDF gave 245.04 cm², an incorrect rod conclusion and 512 cm³,
+with checklist 1/3. The new English example exhausted its tool budget; the
+architecture arithmetic and checklist were correct but the answer omitted a
+source URL (model seed 3884681080). Ordinary jobs passed.

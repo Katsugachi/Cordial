@@ -190,7 +190,7 @@ jobs:
       contains(github.event.head_commit.message, '[research]') ||
       contains(github.event.head_commit.message, '[pdf-test]'))
     runs-on: instabox-medium
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       CORDIAL_PORTABLE_CPU: "1"
     steps:
@@ -222,6 +222,7 @@ jobs:
             CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
             npm --prefix ui test -- --run tests/pdf.test.ts
       - name: Prepare overlapping page regions for the visual experiment
+        id: regions
         if: contains(github.event.head_commit.message, '[pdf-zoom]') && contains(github.event.head_commit.message, '[pdf-test]')
         run: |
           node --test scripts/ci/test_pdf_crops.mjs
@@ -242,6 +243,28 @@ jobs:
           set -o pipefail
           cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
+      - name: Diagnose independent page regions
+        if: always() && contains(github.event.head_commit.message, '[pdf-test]') && contains(github.event.head_commit.message, '[pdf-zoom]') && contains(github.event.head_commit.message, '[pdf-segments]') && steps.regions.outcome == 'success'
+        timeout-minutes: 75
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_PDF_CROP_PREFIX: ${{ runner.temp }}/worksheet-region
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
+          CORDIAL_LIVE_SEED: ${{ github.run_id }}
+        run: |
+          set -o pipefail
+          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact segmented_pdf_regions_diagnostic 2>&1 | tee /tmp/segment-eval.log
+      - name: Publish page-region diagnostics
+        if: always() && contains(github.event.head_commit.message, '[pdf-segments]')
+        run: python3 scripts/ci/task_eval_diagnostics.py /tmp/segment-eval.log
+      - name: Upload page-region diagnostics
+        if: always() && contains(github.event.head_commit.message, '[pdf-segments]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-region-diagnostics
+          path: /tmp/segment-eval.log
+          if-no-files-found: ignore
       - name: Remove temporary worksheet renders
         if: always() && contains(github.event.head_commit.message, '[pdf-test]')
         run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt" "$RUNNER_TEMP/worksheet-region-1.png" "$RUNNER_TEMP/worksheet-region-2.png" "$RUNNER_TEMP/worksheet-region-3.png"

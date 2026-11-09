@@ -888,6 +888,39 @@ async fn rendered_pdf_worksheet_end_to_end() {
     );
 }
 
+/// Diagnostic only: evaluate independent page regions as separate model turns.
+/// This does not exercise the desktop attachment path or certify task planning.
+#[tokio::test]
+#[ignore = "requires optional PDF regions and the real model"]
+async fn segmented_pdf_regions_diagnostic() {
+    let Ok(prefix) = std::env::var("CORDIAL_PDF_CROP_PREFIX") else {
+        eprintln!("PDF regions not supplied; skipping diagnostic");
+        return;
+    };
+    let Some(mut live) = Live::boot().await else { panic!("model unavailable") };
+    live.max_tool_rounds_override = Some(8);
+    let mut answers = Vec::new();
+    for index in 1..=3 {
+        let image = format!("{prefix}-{index}.png");
+        assert!(Path::new(&image).is_file(), "missing page region {index}");
+        let (session, answer) = live.turn(Effort::High, false,
+            "Read this region of a worksheet. Identify and answer each complete visible question, explain your reasoning, and use Python for calculations. If a question is incomplete, say so rather than guessing.",
+            vec![Attachment { kind: AttachmentKind::Image, name: format!("Page region {index}"), path: image }]).await;
+        let python_succeeded = session.messages.iter().any(|m| m.tool_status == Some(cordial_core::session::ToolResultStatus::Ok)
+            && session.messages.iter().flat_map(|m| &m.tool_calls).any(|call| call.name == "python_calculate" && m.tool_call_id.as_deref() == Some(call.id.as_str())));
+        eprintln!("EVAL segment {index} python={python_succeeded} answer={answer:?}");
+        answers.push((answer, python_succeeded));
+    }
+    for (index, expected, tolerance) in [(0, 75.39822368615503, 0.005), (1, 47.16990566028302, 0.005), (2, 98.53444594169618, 0.0005)] {
+        let values = numeric_tokens(&answers[index].0);
+        assert!(values.iter().any(|actual| (actual - expected).abs() < tolerance), "segment {} lacks independently expected value {expected}: {values:?}", index + 1);
+        assert!(answers[index].1, "segment {} did not successfully use Python", index + 1);
+    }
+    let rod = answers[1].0.to_lowercase();
+    assert!(regex::Regex::new(r"\b(yes|will fit|can fit|fits inside|fits in|does fit)\b").unwrap().is_match(&rod));
+    assert!(!regex::Regex::new(r"\b(does not fit|doesn't fit|will not fit|won't fit|cannot fit|can't fit)\b").unwrap().is_match(&rod));
+}
+
 /// Optional exact-file evaluation. The PDF is supplied by the test operator,
 /// not embedded in the repository permanently. This exercises the ordinary
 /// attachment path, without injecting pre-extracted text or answers.
