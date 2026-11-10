@@ -52,9 +52,9 @@ jobs:
           shared-key: cordial-rust
           cache-on-failure: true
       - name: Clippy (harness)
-        run: scripts/ci/report.sh cargo clippy --workspace --exclude cordial-app --all-targets -- -W clippy::all
+        run: scripts/ci/report.sh cargo clippy --locked --workspace --exclude cordial-app --all-targets -- -W clippy::all
       - name: Tests (harness)
-        run: scripts/ci/report.sh cargo test --workspace --exclude cordial-app --all-targets
+        run: scripts/ci/report.sh cargo test --locked --workspace --exclude cordial-app --all-targets
 
   python-sandbox:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -77,12 +77,13 @@ jobs:
       - run: python3 scripts/ci/test_task_eval_diagnostics.py
       - run: python3 scripts/ci/test_preview_11_gate.py
       - run: python3 scripts/ci/check_workflows.py
+      - run: python3 scripts/ci/test_check_workflows.py
       - name: Test bounded WASI Python prototype
         env:
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
-        run: scripts/ci/report.sh cargo test -p cordial-core --features sandbox-python python_sandbox::tests -- --nocapture
+        run: scripts/ci/report.sh cargo test --locked -p cordial-core --features sandbox-python python_sandbox::tests -- --nocapture
       - name: Test sandbox permission policy
-        run: scripts/ci/report.sh cargo test -p cordial-core --features sandbox-python permissions::tests
+        run: scripts/ci/report.sh cargo test --locked -p cordial-core --features sandbox-python permissions::tests
 
   app:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -111,16 +112,17 @@ jobs:
       - name: Build the frontend
         run: npm --prefix ui ci && npm --prefix ui run build
       - name: Test the desktop shell
-        run: scripts/ci/report.sh cargo test -p cordial-app
+        run: scripts/ci/report.sh cargo test --locked -p cordial-app
       - name: Test the opt-in Python bundle resources
         run: python3 scripts/ci/test_python_packaging.py
       - name: Test the opt-in Python desktop integration
-        run: CARGO_BUILD_JOBS=2 scripts/ci/report.sh cargo test -p cordial-app --features experimental-python
+        run: CARGO_BUILD_JOBS=2 scripts/ci/report.sh cargo test --locked -p cordial-app --features experimental-python
       - name: Build and inspect an experimental Linux bundle
         run: |
           cd crates/cordial-app
           CARGO_BUILD_JOBS=2 ../../ui/node_modules/.bin/tauri build --debug --bundles deb --features experimental-python --config tauri.python.conf.json
           cd ../..
+          git diff --exit-code -- Cargo.lock
           python3 scripts/ci/check_python_deb.py
 
   ui:
@@ -241,7 +243,7 @@ jobs:
           CORDIAL_LIVE_SEED: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && !contains(github.event.head_commit.message, '[pdf-random]') && '3792486779' || github.run_id }}
         run: |
           set -o pipefail
-          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/task-eval.log
       - name: Diagnose independent page regions
         if: always() && contains(github.event.head_commit.message, '[pdf-test]') && contains(github.event.head_commit.message, '[pdf-zoom]') && contains(github.event.head_commit.message, '[pdf-segments]') && steps.regions.outcome == 'success'
@@ -253,7 +255,7 @@ jobs:
           CORDIAL_LIVE_SEED: ${{ github.run_id }}
         run: |
           set -o pipefail
-          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact segmented_pdf_regions_diagnostic 2>&1 | tee /tmp/segment-eval.log
       - name: Publish page-region diagnostics
         if: always() && contains(github.event.head_commit.message, '[pdf-segments]')
@@ -274,7 +276,7 @@ jobs:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
           set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/task-eval.log
       - name: Generated task evaluation
         if: ${{ !contains(github.event.head_commit.message, '[research]') && !contains(github.event.head_commit.message, '[pdf-test]') }}
@@ -282,7 +284,7 @@ jobs:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
           set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact generated_complex_tasks_verify_artifacts 2>&1 | tee /tmp/task-eval.log
       - name: Publish task evaluation diagnostics
         if: always()
@@ -300,7 +302,7 @@ jobs:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
           set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact answers_a_plain_factual_question_briefly 2>&1 | tee -a /tmp/live.log
       - name: Full suite
         if: ${{ !contains(github.event.head_commit.message, '[research]') && !contains(github.event.head_commit.message, '[pdf-test]') }}
@@ -308,7 +310,7 @@ jobs:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
         run: |
           set -o pipefail
-          cargo test -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --test live_model -- --ignored --nocapture --test-threads=1 \
             2>&1 | tee /tmp/live.log
       - name: Publish the transcript
         if: always()
@@ -372,7 +374,7 @@ jobs:
           CORDIAL_LIVE_SEED: ${{ github.run_id }}
         run: |
           set -o pipefail
-          cargo test -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+          cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/research-eval.log
       - name: Publish research diagnostics
         if: always()

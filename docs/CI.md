@@ -54,6 +54,11 @@ Cargo and CMake are bounded to four parallel build jobs on the medium machine.
 The existing GitHub Actions caches still hold Cargo dependencies and model
 weights; a fresh VM does not mean those caches are disabled. Model files and
 build products stay in runner temporary/storage paths and are not committed.
+The formatting workflow checks but does not regenerate `Cargo.lock`. Cargo test
+and clippy commands use `--locked`, and desktop/release bundle builds fail if
+Cargo changes the lockfile. Dependency updates need an intentional, reviewed
+lockfile change and fresh CI; bot formatting commits are not evaluated by CI
+automatically.
 
 The workflow placement can be checked without running a build:
 

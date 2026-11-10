@@ -129,6 +129,7 @@ jobs:
           CORDIAL_GGML_OPENCL: ${{ matrix.opencl }}
         run: |
           scripts/ci/report.sh bash -c 'cd crates/cordial-app && ../../ui/node_modules/.bin/tauri build ${{ matrix.args }}'
+          git diff --exit-code -- Cargo.lock
 
       - name: Collect bundles
         uses: actions/upload-artifact@v4
@@ -162,7 +163,7 @@ jobs:
       - run: npm --prefix ui run test
       - run: npm --prefix ui run typecheck
       - name: Core unit and agent tests
-        run: scripts/ci/report.sh cargo test -p cordial-core --lib --test agent_flow
+        run: scripts/ci/report.sh cargo test --locked -p cordial-core --lib --test agent_flow
 
   smoke:
     name: Behavioural smoke test (real model)
@@ -177,7 +178,7 @@ jobs:
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
           RUST_TEST_THREADS: "1"
-        run: scripts/ci/report.sh cargo test -p cordial-core --test live_model -- --ignored --nocapture
+        run: scripts/ci/report.sh cargo test --locked -p cordial-core --test live_model -- --ignored --nocapture
 
   publish-release:
     name: Publish verified preview installers

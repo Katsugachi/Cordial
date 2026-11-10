@@ -192,7 +192,13 @@ left its checklist 0/3. In separate turns the first region's cone answer was
 correct but claimed a Python calculation without calling the tool; the second
 had the correct rod conclusion and rounded the diagonal to 47.2 cm; the third
 misread the cube and gave 512 cm³. The diagnostic failed and no scripts remained.
-The ordinary jobs passed; separating images alone is not a demonstrated fix. At varied seed
+The ordinary jobs passed; separating images alone is not a demonstrated fix. In
+[run 42804151954](https://github.com/Katsugachi/Cordial/actions/runs/42804151954),
+seed 4149446299, the combined-region PDF again gave incorrect answers and an
+unfinished plan. In the separate-region diagnostic, the cone and rod answers
+were correct, but the cube answer was 512 cm³; all three turns executed Python.
+Both research tasks exhausted their budgets. Rust, UI, desktop, sandbox and
+inference jobs passed at the evaluated commit. At varied seed
 3878959921, [run 42533665576](https://github.com/Katsugachi/Cordial/actions/runs/42533665576)
 returned a wrong cone area and rod conclusion, the correct cube volume, and a
 2/3 checklist whose completed steps included the wrong answers. The Python

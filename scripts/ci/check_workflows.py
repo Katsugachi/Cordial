@@ -77,6 +77,14 @@ def main() -> None:
             check(isinstance(job.get("timeout-minutes"), int),
                   f"{name}/{job_name}: missing timeout")
 
+        if name in {"ci.yml", "live.yml", "release.yml"}:
+            for job_name, job in jobs.items():
+                for step in job.get("steps", []):
+                    run = step.get("run", "")
+                    check(all("--locked" in line for line in run.splitlines()
+                              if "cargo test " in line or "cargo clippy " in line),
+                          f"{name}/{job_name}: Cargo tests must use the checked-in lockfile")
+
         if name == "ci.yml":
             check(events(workflow) == {"push", "pull_request", "workflow_dispatch"},
                   "CI: unexpected trigger with access to Instabox")
@@ -98,6 +106,9 @@ def main() -> None:
                   "Format: only trusted push/dispatch events are allowed")
             check(workflow["permissions"]["contents"] == "write",
                   "Format: unexpected token permission")
+            runs = "\n".join(step.get("run", "") for step in jobs["rustfmt"]["steps"])
+            check("cargo generate-lockfile" not in runs and "cargo metadata --locked" in runs,
+                  "Format: never update dependencies implicitly")
         elif name == "live.yml":
             check(events(workflow) == {"schedule", "workflow_dispatch"},
                   "Live model: only schedule/dispatch events are allowed")

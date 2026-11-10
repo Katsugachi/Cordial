@@ -71,7 +71,7 @@ def release_python_configured(workflow):
     # Fail closed if a conditional or continue-on-error could skip the test.
     if any(line.startswith(("if:", "continue-on-error:")) for line in step):
         return False
-    test = any("cargo test -p cordial-core --features sandbox-python python_sandbox::tests" in line
+    test = any("cargo test --locked -p cordial-core --features sandbox-python python_sandbox::tests" in line
                and not any(operator in line for operator in ("||", ";", "|", "#")) for line in step)
     runtime = any("CORDIAL_TEST_PYTHON_WASM:" in line and "python.wasm" in line for line in step)
     return build and test and runtime

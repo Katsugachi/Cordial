@@ -30,7 +30,7 @@ class PreviewGateTests(unittest.TestCase):
       - name: Test bounded Python sandbox on release target
         env:
           CORDIAL_TEST_PYTHON_WASM: /runtime/python.wasm
-        run: cargo test -p cordial-core --features sandbox-python python_sandbox::tests
+        run: cargo test --locked -p cordial-core --features sandbox-python python_sandbox::tests
       - name: Build
         run: tauri build --features experimental-python --config tauri.python.conf.json
 """
