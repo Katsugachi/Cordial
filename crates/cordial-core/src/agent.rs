@@ -306,7 +306,11 @@ impl<'a> Agent<'a> {
             if output.stop == GenStop::Cancelled {
                 let parsed = parse_reply(&output.text, thinking);
                 if !parsed.content.trim().is_empty() || parsed.thinking.is_some() {
-                    let content = python_execution_notice(parsed.content, &original_user_text, python_succeeded);
+                    let content = python_execution_notice(
+                        parsed.content,
+                        &original_user_text,
+                        python_succeeded,
+                    );
                     let partial = Message::assistant(content, parsed.thinking, vec![]);
                     self.events.emit(AgentEvent::AssistantMessage {
                         turn_id: turn_id.clone(),
@@ -347,7 +351,8 @@ impl<'a> Agent<'a> {
                     "Task incomplete: the response was cut off by the output limit.\n\n{}",
                     parsed.content
                 ));
-                let content = python_execution_notice(content, &original_user_text, python_succeeded);
+                let content =
+                    python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -437,7 +442,8 @@ impl<'a> Agent<'a> {
                 } else {
                     parsed.content
                 };
-                let content = python_execution_notice(content, &original_user_text, python_succeeded);
+                let content =
+                    python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -633,7 +639,8 @@ impl<'a> Agent<'a> {
                 } else {
                     content
                 };
-                let content = python_execution_notice(content, &original_user_text, python_succeeded);
+                let content =
+                    python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -1048,8 +1055,13 @@ fn python_execution_notice(answer: String, user_text: &str, python_succeeded: bo
     let answer_lower = answer.to_ascii_lowercase();
     let request_lower = user_text.to_ascii_lowercase();
     let mentions_execution = |text: &str| {
-        text.contains("python") && ["run", "ran", "execut", "using", "use ", "used", "calculat", "verif", "output", "check"]
-            .iter().any(|term| text.contains(term))
+        text.contains("python")
+            && [
+                "run", "ran", "execut", "using", "use ", "used", "calculat", "verif", "output",
+                "check",
+            ]
+            .iter()
+            .any(|term| text.contains(term))
     };
     if mentions_execution(&answer_lower) || mentions_execution(&request_lower) {
         format!("{answer}\n\nPython tool status: no Python calculation completed successfully in this turn.")
@@ -1200,10 +1212,26 @@ mod context_compaction_tests {
     #[test]
     fn python_notice_is_bound_to_successful_execution_in_the_current_turn() {
         let claim = "Using Python to verify the answer: 42.".to_string();
-        assert!(python_execution_notice(claim.clone(), "Calculate this", false).contains("no Python calculation completed successfully"));
-        assert_eq!(python_execution_notice(claim.clone(), "Calculate this", true), claim);
-        assert!(python_execution_notice("The result is 42.".into(), "Please use Python", false).contains("no Python calculation completed successfully"));
-        assert_eq!(python_execution_notice("Python is a programming language.".into(), "What is Python?", false), "Python is a programming language.");
+        assert!(
+            python_execution_notice(claim.clone(), "Calculate this", false)
+                .contains("no Python calculation completed successfully")
+        );
+        assert_eq!(
+            python_execution_notice(claim.clone(), "Calculate this", true),
+            claim
+        );
+        assert!(
+            python_execution_notice("The result is 42.".into(), "Please use Python", false)
+                .contains("no Python calculation completed successfully")
+        );
+        assert_eq!(
+            python_execution_notice(
+                "Python is a programming language.".into(),
+                "What is Python?",
+                false
+            ),
+            "Python is a programming language."
+        );
     }
 
     #[test]
