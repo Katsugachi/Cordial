@@ -230,6 +230,7 @@ impl<'a> Agent<'a> {
         let mut truncated_task_retry = false;
         let mut tool_context = (self.config.max_tool_result_chars, true, true);
         let mut repeated_fetches: HashMap<String, u32> = HashMap::new();
+        let mut python_succeeded = false;
 
         let outcome = loop {
             if self.cancelled() {
@@ -305,7 +306,8 @@ impl<'a> Agent<'a> {
             if output.stop == GenStop::Cancelled {
                 let parsed = parse_reply(&output.text, thinking);
                 if !parsed.content.trim().is_empty() || parsed.thinking.is_some() {
-                    let partial = Message::assistant(parsed.content, parsed.thinking, vec![]);
+                    let content = python_execution_notice(parsed.content, &original_user_text, python_succeeded);
+                    let partial = Message::assistant(content, parsed.thinking, vec![]);
                     self.events.emit(AgentEvent::AssistantMessage {
                         turn_id: turn_id.clone(),
                         message: partial.clone(),
@@ -345,6 +347,7 @@ impl<'a> Agent<'a> {
                     "Task incomplete: the response was cut off by the output limit.\n\n{}",
                     parsed.content
                 ));
+                let content = python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -434,6 +437,7 @@ impl<'a> Agent<'a> {
                 } else {
                     parsed.content
                 };
+                let content = python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -531,6 +535,9 @@ impl<'a> Agent<'a> {
                 let ok = self
                     .execute_call(session, &turn_id, call, reconciling_plan)
                     .await;
+                if call.name == "python_calculate" && ok {
+                    python_succeeded = true;
+                }
                 if self.config.effort == Effort::Task {
                     if call.name == "web_search" || call.name == "web_fetch" {
                         research_streak += 1;
@@ -626,6 +633,7 @@ impl<'a> Agent<'a> {
                 } else {
                     content
                 };
+                let content = python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
                 self.events.emit(AgentEvent::AssistantMessage {
                     turn_id: turn_id.clone(),
@@ -1030,6 +1038,26 @@ fn plan_all_done(session: &Session) -> bool {
             .all(|step| step.status == PlanStatus::Done)
 }
 
+// A model can describe running code without making a tool call. Report the
+// factual execution status for this turn rather than trusting that claim. This
+// does not establish that a successful program was relevant or correct.
+fn python_execution_notice(answer: String, user_text: &str, python_succeeded: bool) -> String {
+    if python_succeeded {
+        return answer;
+    }
+    let answer_lower = answer.to_ascii_lowercase();
+    let request_lower = user_text.to_ascii_lowercase();
+    let mentions_execution = |text: &str| {
+        text.contains("python") && ["run", "ran", "execut", "using", "use ", "used", "calculat", "verif", "output", "check"]
+            .iter().any(|term| text.contains(term))
+    };
+    if mentions_execution(&answer_lower) || mentions_execution(&request_lower) {
+        format!("{answer}\n\nPython tool status: no Python calculation completed successfully in this turn.")
+    } else {
+        answer
+    }
+}
+
 fn task_verification_notice(answer: String) -> String {
     format!("{answer}\n\nTask results and checklist are model-generated, not independently verified. Check calculations, sources and file changes before relying on them.")
 }
@@ -1168,6 +1196,15 @@ mod context_compaction_tests {
     use super::*;
     use crate::backend::{ScriptFailure, ScriptedBackend};
     use crate::session::Role;
+
+    #[test]
+    fn python_notice_is_bound_to_successful_execution_in_the_current_turn() {
+        let claim = "Using Python to verify the answer: 42.".to_string();
+        assert!(python_execution_notice(claim.clone(), "Calculate this", false).contains("no Python calculation completed successfully"));
+        assert_eq!(python_execution_notice(claim.clone(), "Calculate this", true), claim);
+        assert!(python_execution_notice("The result is 42.".into(), "Please use Python", false).contains("no Python calculation completed successfully"));
+        assert_eq!(python_execution_notice("Python is a programming language.".into(), "What is Python?", false), "Python is a programming language.");
+    }
 
     #[test]
     fn fetch_guard_normalizes_fragments_without_collapsing_queries() {

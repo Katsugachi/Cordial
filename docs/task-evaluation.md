@@ -185,7 +185,14 @@ exhausted the tool budget without substantive answers (seed 3867300949). The
 the fixed comparison seed; crops remain evaluation-only. The optional
 `[pdf-segments]` diagnostic additionally asks the model to solve each region in
 a separate fresh conversation. It is not an autonomous checklist or desktop
-end-to-end test and cannot qualify a release. At varied seed
+end-to-end test and cannot qualify a release. In
+[run 42542730259](https://github.com/Katsugachi/Cordial/actions/runs/42542730259),
+seed 3888024604, the combined-region task gave wrong cone and cube answers and
+left its checklist 0/3. In separate turns the first region's cone answer was
+correct but claimed a Python calculation without calling the tool; the second
+had the correct rod conclusion and rounded the diagonal to 47.2 cm; the third
+misread the cube and gave 512 cm³. The diagnostic failed and no scripts remained.
+The ordinary jobs passed; separating images alone is not a demonstrated fix. At varied seed
 3878959921, [run 42533665576](https://github.com/Katsugachi/Cordial/actions/runs/42533665576)
 returned a wrong cone area and rod conclusion, the correct cube volume, and a
 2/3 checklist whose completed steps included the wrong answers. The Python

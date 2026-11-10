@@ -858,6 +858,36 @@ async fn blocked_steps_are_not_reported_as_task_completion() {
 }
 
 #[tokio::test]
+async fn python_claim_is_flagged_without_a_successful_call_in_this_turn() {
+    use cordial_core::session::{ToolArgument, ToolCall, ToolResultStatus};
+    let fixture = Fixture::new("python-claim");
+    let mut session = Session::new();
+    let previous = ToolCall { id: "previous-python".into(), name: "python_calculate".into(), arguments: vec![ToolArgument { name: "code".into(), value: "print(42)".into() }] };
+    session.push(Message::assistant("", None, vec![previous]));
+    let mut old_result = Message::tool_result("previous-python", "Python output: 42");
+    old_result.tool_status = Some(ToolResultStatus::Ok);
+    session.push(old_result);
+    let (result, events) = run_turn(&fixture, vec!["Using Python to verify, the answer is 42."],
+        config(Effort::High, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    let final_answer = &session.messages.last().unwrap().content;
+    assert!(final_answer.contains("no Python calculation completed successfully in this turn"));
+    assert!(events.iter().any(|event| matches!(event, AgentEvent::AssistantMessage { message, .. } if message.content.contains("Python tool status"))));
+}
+
+#[tokio::test]
+async fn unavailable_python_call_is_not_reported_as_successful() {
+    let fixture = Fixture::new("unavailable-python-claim");
+    let mut session = Session::new();
+    let call = r#"<tool_call><function=python_calculate><parameter=code>print(42)</parameter></function></tool_call>"#;
+    let (result, _) = run_turn(&fixture, vec![call, "Using Python, the result is 42."],
+        config(Effort::High, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(session.messages.last().unwrap().content.contains("no Python calculation completed successfully in this turn"));
+    assert!(session.messages.iter().any(|message| message.tool_status == Some(cordial_core::session::ToolResultStatus::Failed)));
+}
+
+#[tokio::test]
 async fn task_temporarily_pauses_research_to_allow_other_work() {
     let fixture = Fixture::new("research-pause");
     let mut session = Session::new();

@@ -132,7 +132,10 @@ llama.cpp runs in-process; there is no inference server listening on a port.
 
 Task mode is experimental. Completed and partial Task answers carry a reminder to
 check results independently. The checklist reflects the model’s own reports and is
-not proof of correctness. During an automatic reconciliation prompt, existing
+not proof of correctness. When a request or answer mentions using Python but no
+Python calculation succeeded in that turn, the final response reports that fact.
+This heuristic does not detect every claim, nor verify that successful code or
+its results match the task. During an automatic reconciliation prompt, existing
 step titles must be preserved in order; this prevents that prompt from silently
 replacing unfinished steps but does not validate the statuses. Other plan updates
 can still revise the checklist. Work stops when the app exits, when its budget runs

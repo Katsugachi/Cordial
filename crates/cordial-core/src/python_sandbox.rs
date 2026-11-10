@@ -303,6 +303,7 @@ mod tests {
             "messages: {:?}",
             session.messages
         );
+        assert!(!session.messages.last().unwrap().content.contains("no Python calculation completed successfully in this turn"));
         assert_eq!(
             std::fs::read_dir(&root).unwrap().count(),
             0,
