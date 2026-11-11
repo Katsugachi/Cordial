@@ -404,6 +404,11 @@ impl ToolRuntime {
         self.effort
     }
 
+    /// Update the limits used by subsequent tool calls.
+    pub fn set_effort(&mut self, effort: Effort) {
+        self.effort = effort;
+    }
+
     /// Runs a tool call. Errors are returned as failed outcomes so the model can
     /// read them and try something else, which is far more useful than a crash.
     pub async fn execute(&self, call: &ToolCall) -> ToolOutcome {

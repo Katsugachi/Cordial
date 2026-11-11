@@ -267,6 +267,30 @@ jobs:
           name: page-region-diagnostics
           path: /tmp/segment-eval.log
           if-no-files-found: ignore
+      - name: Diagnose Horizon on supplied worksheet
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]') && contains(github.event.head_commit.message, '[pdf-test]')
+        timeout-minutes: 60
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
+          CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
+          CORDIAL_LIVE_SEED: ${{ github.run_id }}
+          CORDIAL_EVAL_HORIZON: "1"
+        run: |
+          set -o pipefail
+          cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact rendered_pdf_worksheet_end_to_end 2>&1 | tee /tmp/horizon-pdf.log
+      - name: Publish Horizon PDF diagnostics
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]')
+        run: python3 scripts/ci/task_eval_diagnostics.py /tmp/horizon-pdf.log
+      - name: Upload Horizon PDF diagnostics
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-pdf-diagnostics
+          path: /tmp/horizon-pdf.log
+          if-no-files-found: ignore
       - name: Remove temporary worksheet renders
         if: always() && contains(github.event.head_commit.message, '[pdf-test]')
         run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt" "$RUNNER_TEMP/worksheet-region-1.png" "$RUNNER_TEMP/worksheet-region-2.png" "$RUNNER_TEMP/worksheet-region-3.png"
@@ -347,7 +371,7 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       contains(github.event.head_commit.message, '[parallel-research]')
     runs-on: instabox-medium
-    timeout-minutes: 110
+    timeout-minutes: 180
     env:
       CORDIAL_PORTABLE_CPU: "1"
       CARGO_BUILD_JOBS: "4"
@@ -376,6 +400,28 @@ jobs:
           set -o pipefail
           cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
             --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/research-eval.log
+      - name: Diagnose Horizon on research worksheets
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]')
+        timeout-minutes: 60
+        env:
+          CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
+          CORDIAL_LIVE_SEED: ${{ github.run_id }}
+          CORDIAL_EVAL_HORIZON: "1"
+        run: |
+          set -o pipefail
+          cargo test --locked -p cordial-core --features sandbox-python --test live_model -- --ignored --nocapture --test-threads=1 \
+            --exact research_worksheets_architecture_and_english 2>&1 | tee /tmp/horizon-research.log
+      - name: Publish Horizon research diagnostics
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]')
+        run: python3 scripts/ci/task_eval_diagnostics.py /tmp/horizon-research.log
+      - name: Upload Horizon research diagnostics
+        if: always() && contains(github.event.head_commit.message, '[horizon-eval]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-research-diagnostics
+          path: /tmp/horizon-research.log
+          if-no-files-found: ignore
       - name: Publish research diagnostics
         if: always()
         run: python3 scripts/ci/task_eval_diagnostics.py /tmp/research-eval.log

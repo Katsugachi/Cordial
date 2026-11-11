@@ -352,6 +352,17 @@ impl Live {
         text: &str,
         attachments: Vec<Attachment>,
     ) -> (Session, String) {
+        // Opt-in diagnostic only: the release evaluations remain on Task mode.
+        // Horizon has no round cap, so CI applies an external step timeout.
+        let effort = if effort == Effort::Task
+            && std::env::var("CORDIAL_EVAL_HORIZON").as_deref() == Ok("1")
+        {
+            Effort::Horizon
+        } else {
+            effort
+        };
+        eprintln!("EVAL effort={effort:?}");
+        self.runtime.set_effort(effort);
         let mut session = Session::new();
         let gate = ApprovalGate::new();
         let mut policy = PermissionPolicy::new(PermissionMode::Auto);
@@ -402,11 +413,11 @@ impl Live {
             memory: String::new(),
             skill: String::new(),
             thinking: effort != Effort::Low,
-            max_output_tokens: 1_536,
+            max_output_tokens: effort.max_output_tokens(),
             max_tool_rounds: self
                 .max_tool_rounds_override
                 .unwrap_or_else(|| effort.max_tool_rounds()),
-            max_tool_result_chars: 6_000,
+            max_tool_result_chars: effort.fetch_chars(),
             keep_image_turns: 2,
             sampling: SamplingParams {
                 temperature: effort.temperature(),
