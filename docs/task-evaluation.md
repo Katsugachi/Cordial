@@ -248,3 +248,14 @@ the default 131,072). This change does not invalidate the observed wrong
 answers or establish that a larger context improves them. Horizon is a
 separate diagnostic, not release evidence; its external wall-clock timeout
 protects CI from an unbounded run.
+
+[Run 43024113716](https://github.com/Katsugachi/Cordial/actions/runs/43024113716)
+used a 32,768-token context (seed 74440766). Its PDF tests did not reach the
+model task: the image-capacity probe still assumed an 8K context and failed
+its own assertion. This is an evaluation harness error, not a model result;
+the probe has been corrected to use the actual configured context. For the
+research worksheet, Task gave correct architecture arithmetic (209 m², 60 m,
+92 packs, $4,416), but citations included sources it had not fetched and the
+English task exhausted the round budget after repetitive searches. Horizon's
+research diagnostic timed out after 60 minutes before producing a final result.
+Both research steps hit their CI time limits. The ordinary CI jobs passed.

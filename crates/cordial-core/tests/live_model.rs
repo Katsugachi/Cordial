@@ -228,6 +228,19 @@ fn pdf_crop_prefix() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+// The ordinary smoke suite uses 8K. Long worksheet evaluations may opt into
+// a larger bounded context; use the same value for the multimodal preflight.
+fn live_context() -> u32 {
+    std::env::var("CORDIAL_LIVE_CONTEXT")
+        .ok()
+        .map(|value| {
+            let context = value.parse::<u32>().expect("invalid CORDIAL_LIVE_CONTEXT");
+            assert!((8_192..=32_768).contains(&context), "test context out of range");
+            context
+        })
+        .unwrap_or_else(|| if pdf_crop_prefix().is_some() { 32_768 } else { 8_192 })
+}
+
 impl Live {
     /// Loads the model. Returns `None` only when no model was requested at all;
     /// when `CORDIAL_MODEL_DIR` is pinned (as CI does) a missing or unloadable
@@ -260,26 +273,7 @@ impl Live {
             }
         };
 
-        // The default remains 8K for ordinary smoke tests. Worksheet runs can
-        // opt into a larger, bounded test context to accommodate the production
-        // output-token reserve and long multimodal/tool inputs.
-        let context = std::env::var("CORDIAL_LIVE_CONTEXT")
-            .ok()
-            .map(|value| {
-                let context = value.parse::<u32>().expect("invalid CORDIAL_LIVE_CONTEXT");
-                assert!(
-                    (8_192..=32_768).contains(&context),
-                    "test context out of range"
-                );
-                context
-            })
-            .unwrap_or_else(|| {
-                if pdf_crop_prefix().is_some() {
-                    32_768
-                } else {
-                    8_192
-                }
-            });
+        let context = live_context();
         eprintln!("EVAL context_tokens={context}");
         let options = engine_options(
             &paths.weights,
@@ -735,11 +729,7 @@ async fn rendered_pdf_worksheet_end_to_end() {
             cordial_core::prompt::DEFAULT_MEDIA_MARKER
         ),
         media: vec![PathBuf::from(&image)],
-        max_tokens: if pdf_crop_prefix().is_some() {
-            32_576
-        } else {
-            8_000
-        },
+        max_tokens: live_context() - 192,
         thinking: false,
         sampling: SamplingParams::default(),
     };
