@@ -234,6 +234,7 @@ jobs:
         if: contains(github.event.head_commit.message, '[pdf-test]')
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_LIVE_CONTEXT: "32768"
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
           CORDIAL_PDF_CROP_PREFIX: ${{ contains(github.event.head_commit.message, '[pdf-zoom]') && format('{0}/worksheet-region', runner.temp) || '' }}
@@ -272,6 +273,7 @@ jobs:
         timeout-minutes: 60
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_LIVE_CONTEXT: "32768"
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
@@ -394,6 +396,7 @@ jobs:
         timeout-minutes: 95
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_LIVE_CONTEXT: "32768"
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
           CORDIAL_LIVE_SEED: ${{ github.run_id }}
         run: |
@@ -405,6 +408,7 @@ jobs:
         timeout-minutes: 60
         env:
           CORDIAL_MODEL_DIR: ${{ runner.temp }}/cordial-models
+          CORDIAL_LIVE_CONTEXT: "32768"
           CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
           CORDIAL_LIVE_SEED: ${{ github.run_id }}
           CORDIAL_EVAL_HORIZON: "1"

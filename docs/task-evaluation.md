@@ -227,3 +227,24 @@ the full-page PDF gave 245.04 cm², an incorrect rod conclusion and 512 cm³,
 with checklist 1/3. The new English example exhausted its tool budget; the
 architecture arithmetic and checklist were correct but the answer omitted a
 source URL (model seed 3884681080). Ordinary jobs passed.
+
+### Task and Horizon worksheet evaluation with production effort settings
+
+[Run 43016355747](https://github.com/Katsugachi/Cordial/actions/runs/43016355747)
+used seed 66682797, the full-page supplied PDF and independently keyed research
+worksheets. Both Task and Horizon evaluations failed. Task repeatedly ran Python
+on the PDF and filled the context before answering. Horizon used the incorrect
+cone formula (245.04 cm²) before filling the context. No scripts remained.
+For architecture, the correct answers were area 300 m², perimeter 74 m,
+132 packs and $6,336. Task answered 1 pack and $52.80; Horizon answered 120 packs
+and $5,760. Horizon's loop guard stopped it, and its English attempt also stalled;
+Task's English attempt filled the context. All ordinary CI jobs passed.
+
+This run raised the output reserve to the production Task/Horizon setting of
+4,096 tokens but retained the old 8,192-token smoke-test context, leaving only
+4,096 tokens for prompt and history. This artificially constrains long tasks,
+so subsequent worksheet diagnostics use a 32,768-token context (still below
+the default 131,072). This change does not invalidate the observed wrong
+answers or establish that a larger context improves them. Horizon is a
+separate diagnostic, not release evidence; its external wall-clock timeout
+protects CI from an unbounded run.

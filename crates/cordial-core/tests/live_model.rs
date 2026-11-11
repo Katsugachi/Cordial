@@ -260,13 +260,18 @@ impl Live {
             }
         };
 
-        // The optional visual-region experiment needs more image positions.
-        // Ordinary live tests keep the existing 8K context budget.
-        let context = if pdf_crop_prefix().is_some() {
-            32_768
-        } else {
-            8_192
-        };
+        // The default remains 8K for ordinary smoke tests. Worksheet runs can
+        // opt into a larger, bounded test context to accommodate the production
+        // output-token reserve and long multimodal/tool inputs.
+        let context = std::env::var("CORDIAL_LIVE_CONTEXT")
+            .ok()
+            .map(|value| {
+                let context = value.parse::<u32>().expect("invalid CORDIAL_LIVE_CONTEXT");
+                assert!((8_192..=32_768).contains(&context), "test context out of range");
+                context
+            })
+            .unwrap_or_else(|| if pdf_crop_prefix().is_some() { 32_768 } else { 8_192 });
+        eprintln!("EVAL context_tokens={context}");
         let options = engine_options(
             &paths.weights,
             paths.projector.as_deref(),
