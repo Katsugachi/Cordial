@@ -259,3 +259,15 @@ research worksheet, Task gave correct architecture arithmetic (209 m², 60 m,
 English task exhausted the round budget after repetitive searches. Horizon's
 research diagnostic timed out after 60 minutes before producing a final result.
 Both research steps hit their CI time limits. The ordinary CI jobs passed.
+
+[Run 43049533432](https://github.com/Katsugachi/Cordial/actions/runs/43049533432)
+fixed the probe and evaluated the full-page worksheet at 32,768 context tokens,
+seed 99860482. Both Task and Horizon failed. Task answered cone 245.04 cm²,
+rod fits with diagonal 47.17 cm, and cube 512 cm³, with only one of three
+plan steps marked done. Horizon answered cone 216.46 cm², box diagonal
+50.25 cm, and cube 512 cm³, with no steps done. The correct values are
+approximately 75.40 cm², 47.17 cm (rod fits), and 98.534 cm³. Horizon's Python
+results (245.04, 64.16 and 512) also contradicted parts of its final answer.
+Both used Python without leaving script files. Rust, UI, desktop, inference and
+sandbox jobs passed; research was not run on this commit. These are model
+failures, not failures of the earlier context probe.
