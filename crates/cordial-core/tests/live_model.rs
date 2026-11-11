@@ -235,10 +235,19 @@ fn live_context() -> u32 {
         .ok()
         .map(|value| {
             let context = value.parse::<u32>().expect("invalid CORDIAL_LIVE_CONTEXT");
-            assert!((8_192..=32_768).contains(&context), "test context out of range");
+            assert!(
+                (8_192..=32_768).contains(&context),
+                "test context out of range"
+            );
             context
         })
-        .unwrap_or_else(|| if pdf_crop_prefix().is_some() { 32_768 } else { 8_192 })
+        .unwrap_or_else(|| {
+            if pdf_crop_prefix().is_some() {
+                32_768
+            } else {
+                8_192
+            }
+        })
 }
 
 impl Live {
