@@ -245,9 +245,8 @@ impl<'a> Agent<'a> {
             // Reserve a few initial generations for planning. Presenting only
             // update_plan avoids burying it among unrelated tools for small
             // models; after the retries, permit work but report an absent plan.
-            let planning = self.config.effort.is_task()
-                && session.plan.is_empty()
-                && planning_attempts < 3;
+            let planning =
+                self.config.effort.is_task() && session.plan.is_empty() && planning_attempts < 3;
             let mut tools_for_prompt = tools::specs(self.config.web_enabled);
             if !self.tools.has_python_sandbox() {
                 tools_for_prompt.retain(|tool| tool.name != "python_calculate");
@@ -387,8 +386,7 @@ impl<'a> Agent<'a> {
             }
 
             if parsed.calls.is_empty() {
-                if self.config.effort.is_task() && plan_nudges < 3 && !plan_complete(session)
-                {
+                if self.config.effort.is_task() && plan_nudges < 3 && !plan_complete(session) {
                     plan_nudges += 1;
                     reconcile_next = !session.plan.is_empty();
                     retry_instruction = if session.plan.is_empty() {
@@ -485,7 +483,11 @@ impl<'a> Agent<'a> {
             let mut repeated_call = false;
             if self.config.effort == Effort::Horizon {
                 let call = &calls[0];
-                let mut args: Vec<_> = call.arguments.iter().map(|arg| (&arg.name, &arg.value)).collect();
+                let mut args: Vec<_> = call
+                    .arguments
+                    .iter()
+                    .map(|arg| (&arg.name, &arg.value))
+                    .collect();
                 args.sort_unstable();
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 call.name.hash(&mut hasher);
@@ -636,11 +638,17 @@ impl<'a> Agent<'a> {
             }
 
             if self.config.effort == Effort::Horizon {
-                failed_calls = if first_call_ok { 0 } else { failed_calls.saturating_add(1) };
+                failed_calls = if first_call_ok {
+                    0
+                } else {
+                    failed_calls.saturating_add(1)
+                };
             }
-            let stalled = self.config.effort == Effort::Horizon
-                && (repeated_call || failed_calls >= 4);
-            if stalled || (self.config.effort != Effort::Horizon && rounds >= self.config.max_tool_rounds) {
+            let stalled =
+                self.config.effort == Effort::Horizon && (repeated_call || failed_calls >= 4);
+            if stalled
+                || (self.config.effort != Effort::Horizon && rounds >= self.config.max_tool_rounds)
+            {
                 // Give the model one final chance with tools removed, so the
                 // user gets a summary instead of silence.
                 let notice = if stalled {
@@ -660,7 +668,13 @@ impl<'a> Agent<'a> {
                     .await
                 {
                     Ok(output) => output,
-                    Err(_) => break if stalled { StopReason::Stalled } else { StopReason::ToolBudget },
+                    Err(_) => {
+                        break if stalled {
+                            StopReason::Stalled
+                        } else {
+                            StopReason::ToolBudget
+                        }
+                    }
                 };
                 output_tokens = output_tokens.saturating_add(output.output_tokens);
                 prompt_tokens = prompt_tokens.saturating_add(output.prompt_tokens);
@@ -692,7 +706,11 @@ impl<'a> Agent<'a> {
                 });
                 session.push(message);
                 self.checkpoint(session);
-                break if stalled { StopReason::Stalled } else { StopReason::ToolBudget };
+                break if stalled {
+                    StopReason::Stalled
+                } else {
+                    StopReason::ToolBudget
+                };
             }
         };
 
@@ -886,11 +904,7 @@ impl<'a> Agent<'a> {
                     return Ok(output);
                 }
                 Err(err @ CoreError::ContextOverflow { .. }) => {
-                    let max_attempts = if self.config.effort.is_task() {
-                        6
-                    } else {
-                        4
-                    };
+                    let max_attempts = if self.config.effort.is_task() { 6 } else { 4 };
                     if attempts >= max_attempts {
                         return Err(err);
                     }

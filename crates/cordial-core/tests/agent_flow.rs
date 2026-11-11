@@ -1304,14 +1304,25 @@ async fn horizon_continues_past_task_budget_for_distinct_calls() {
     let mut session = Session::new();
     let mut script = vec![r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Read files","status":"running"}]</parameter></function></tool_call>"#.to_string()];
     for n in 0..100 {
-        std::fs::write(fixture.workspace.join(format!("{n}.txt")), format!("file {n}")).unwrap();
+        std::fs::write(
+            fixture.workspace.join(format!("{n}.txt")),
+            format!("file {n}"),
+        )
+        .unwrap();
         script.push(format!("<tool_call><function=read_file><parameter=path>{n}.txt</parameter></function></tool_call>"));
     }
     script.push(r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Read files","status":"done"}]</parameter></function></tool_call>"#.to_string());
     script.push("Finished reading.".to_string());
     let mut cfg = config(Effort::Horizon, PermissionMode::Auto);
     cfg.max_tool_rounds = 2; // Horizon bypasses even a small configured fixed budget.
-    let (result, _) = run_turn(&fixture, script.iter().map(String::as_str).collect(), cfg, &mut session, None).await;
+    let (result, _) = run_turn(
+        &fixture,
+        script.iter().map(String::as_str).collect(),
+        cfg,
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Answered);
     assert!(result.rounds > Effort::Task.max_tool_rounds());
 }
@@ -1322,10 +1333,30 @@ async fn horizon_stops_before_a_third_identical_call() {
     let mut session = Session::new();
     let plan = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Read notes","status":"running"}]</parameter></function></tool_call>"#;
     let read = "<tool_call><function=read_file><parameter=path>notes.txt</parameter></function></tool_call>";
-    let (result, events) = run_turn(&fixture, vec![plan, read, read, read, "Work remains."], config(Effort::Horizon, PermissionMode::Auto), &mut session, None).await;
+    let (result, events) = run_turn(
+        &fixture,
+        vec![plan, read, read, read, "Work remains."],
+        config(Effort::Horizon, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Stalled);
-    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")).count(), 2);
-    assert!(session.messages.last().unwrap().content.contains("Task stopped"));
+    assert_eq!(
+        events
+            .iter()
+            .filter(
+                |e| matches!(e, AgentEvent::ToolCallStarted { name, .. } if name == "read_file")
+            )
+            .count(),
+        2
+    );
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("Task stopped"));
 }
 
 #[tokio::test]
@@ -1337,7 +1368,19 @@ async fn horizon_stops_after_consecutive_distinct_failures() {
     let mut script = vec![plan];
     script.extend(calls.iter().map(String::as_str));
     script.push("Files unavailable.");
-    let (result, _) = run_turn(&fixture, script, config(Effort::Horizon, PermissionMode::Auto), &mut session, None).await;
+    let (result, _) = run_turn(
+        &fixture,
+        script,
+        config(Effort::Horizon, PermissionMode::Auto),
+        &mut session,
+        None,
+    )
+    .await;
     assert_eq!(result.stop, StopReason::Stalled);
-    assert!(session.messages.last().unwrap().content.contains("Task stopped"));
+    assert!(session
+        .messages
+        .last()
+        .unwrap()
+        .content
+        .contains("Task stopped"));
 }

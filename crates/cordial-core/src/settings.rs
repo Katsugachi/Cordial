@@ -221,7 +221,10 @@ mod tests {
 
     #[test]
     fn horizon_settings_round_trip() {
-        let settings = Settings { effort: Effort::Horizon, ..Settings::default() };
+        let settings = Settings {
+            effort: Effort::Horizon,
+            ..Settings::default()
+        };
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains("\"horizon\""));
         assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
