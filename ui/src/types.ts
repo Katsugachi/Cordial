@@ -1,7 +1,7 @@
 // Types mirrored from `cordial-core` (serde names must match exactly).
 
 export type PermissionMode = "auto" | "manual";
-export type Effort = "low" | "medium" | "high" | "task";
+export type Effort = "low" | "medium" | "high" | "task" | "horizon";
 
 export interface Settings {
   context_tokens: number;
@@ -111,6 +111,7 @@ export interface Bootstrap {
 export type StopReason =
   | "answered"
   | "tool_budget"
+  | "stalled"
   | "cancelled"
   | "context_full"
   | "failed"
@@ -174,7 +175,7 @@ export type AgentEvent =
   | { type: "download_finished"; file: string; path: string }
   | { type: "download_failed"; file: string; message: string };
 
-export const EFFORTS: Effort[] = ["low", "medium", "high", "task"];
+export const EFFORTS: Effort[] = ["low", "medium", "high", "task", "horizon"];
 export const PERMISSION_MODES: PermissionMode[] = ["auto", "manual"];
 
 export function effortLabel(effort: Effort): string {

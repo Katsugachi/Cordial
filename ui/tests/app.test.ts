@@ -71,10 +71,10 @@ describe("window", () => {
   it("changes effort in the composer", async () => {
     const root = await bootApp();
     const select = root.querySelector<HTMLSelectElement>("#effort-select")!;
-    select.value = "high";
+    select.value = "horizon";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.advanceTimersByTimeAsync(20);
-    expect(root.querySelector<HTMLSelectElement>("#effort-select")?.value).toBe("high");
+    expect(root.querySelector<HTMLSelectElement>("#effort-select")?.value).toBe("horizon");
   });
 
   it("lets the user disable web access and warns before re-enabling it", async () => {

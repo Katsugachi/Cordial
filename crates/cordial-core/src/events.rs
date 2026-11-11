@@ -15,6 +15,8 @@ pub enum StopReason {
     Answered,
     /// The effort budget for tool calls ran out.
     ToolBudget,
+    /// Horizon stopped on a repeated-call or failure loop.
+    Stalled,
     /// The user pressed stop.
     Cancelled,
     /// The context window could not fit the conversation, even after trimming.
@@ -30,6 +32,7 @@ impl StopReason {
         match self {
             StopReason::Answered => "answered",
             StopReason::ToolBudget => "tool_budget",
+            StopReason::Stalled => "stalled",
             StopReason::Cancelled => "cancelled",
             StopReason::ContextFull => "context_full",
             StopReason::Failed => "failed",

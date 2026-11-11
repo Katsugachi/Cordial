@@ -30,6 +30,7 @@ export function composerHtml(state: AppState, attachments: Attachment[]): string
           <option value="medium" ${state.settings.effort === "medium" ? "selected" : ""}>Medium</option>
           <option value="high" ${state.settings.effort === "high" ? "selected" : ""}>High</option>
           <option value="task" ${state.settings.effort === "task" ? "selected" : ""}>Task</option>
+          <option value="horizon" ${state.settings.effort === "horizon" ? "selected" : ""}>Horizon</option>
         </select>
         ${sendButton}
       </div>

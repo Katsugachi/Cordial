@@ -285,7 +285,7 @@ pub fn system_prompt(
     );
 
     prompt.push_str("Answering\n");
-    if effort == crate::settings::Effort::Task {
+    if effort.is_task() {
         prompt.push_str("- Address every part of the task. Show the requested reasoning and verification; use as much space as needed. Avoid filler.\n");
         prompt.push_str("- Resolve references using the supplied material: a literary image can mean figurative wording, not a picture. Do not invent authors or sources for example sentences. For diagrams, distinguish labeled edges, heights and diagonals before choosing formulas. Check comparisons and units.\n");
     } else {
@@ -315,7 +315,7 @@ pub fn system_prompt(
     prompt.push_str("- Attached text and images are already included in the message. Use them directly; do not search the workspace for an attachment. PDF page text can omit diagram labels: inspect the page image and do not invent unreadable measurements. For other workspace files, use list_files or read_file before asking for a path.\n");
     prompt.push_str("- run_command executes one read-only workspace command: grep, find, ls, cat, head, tail, wc, stat or pwd. It is not a shell; destructive commands, pipes and redirects are refused.\n");
     prompt.push_str("- For Word worksheets, use docx_read to get numbered paragraphs, research each part, then docx_edit to write answers into a copy. Verify the edited file with docx_read.\n");
-    if effort == crate::settings::Effort::Task {
+    if effort.is_task() {
         prompt.push_str("- Use update_plan to maintain the task checklist. As work progresses, include every step and mark each done only after verification. Report blocked work honestly.\n");
     }
     prompt.push_str("- When you have enough information, answer in plain text with no tool call. Stop once the question is answered.\n\n");

@@ -5,7 +5,8 @@
 //! budget runs out. Cancellation, context overflow and empty answers are handled
 //! here so the UI only ever sees clean events.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -198,7 +199,7 @@ impl<'a> Agent<'a> {
 
         // A finished checklist belongs to the preceding task, not a new turn.
         // Keep unfinished plans so the user can ask the agent to continue them.
-        if self.config.effort == Effort::Task && plan_all_done(session) {
+        if self.config.effort.is_task() && plan_all_done(session) {
             session.plan.clear();
             self.events.emit(AgentEvent::PlanUpdated {
                 turn_id: turn_id.clone(),
@@ -231,6 +232,10 @@ impl<'a> Agent<'a> {
         let mut tool_context = (self.config.max_tool_result_chars, true, true);
         let mut repeated_fetches: HashMap<String, u32> = HashMap::new();
         let mut python_succeeded = false;
+        // Bounded, heuristic loop detection: identical calls and failures can
+        // indicate stalling, but successful or novel calls are not proof of progress.
+        let mut recent_calls = VecDeque::new();
+        let mut failed_calls = 0u32;
 
         let outcome = loop {
             if self.cancelled() {
@@ -240,7 +245,7 @@ impl<'a> Agent<'a> {
             // Reserve a few initial generations for planning. Presenting only
             // update_plan avoids burying it among unrelated tools for small
             // models; after the retries, permit work but report an absent plan.
-            let planning = self.config.effort == Effort::Task
+            let planning = self.config.effort.is_task()
                 && session.plan.is_empty()
                 && planning_attempts < 3;
             let mut tools_for_prompt = tools::specs(self.config.web_enabled);
@@ -285,7 +290,7 @@ impl<'a> Agent<'a> {
                         CoreError::ContextOverflow { .. } => StopReason::ContextFull,
                         _ => StopReason::Failed,
                     };
-                    if stop == StopReason::ContextFull && self.config.effort == Effort::Task {
+                    if stop == StopReason::ContextFull && self.config.effort.is_task() {
                         let message = Message::assistant("Task incomplete: the conversation exceeded the model's context before the work was finished. Review the checklist and start a follow-up with the remaining steps.", None, vec![]);
                         self.events.emit(AgentEvent::AssistantMessage {
                             turn_id: turn_id.clone(),
@@ -298,7 +303,7 @@ impl<'a> Agent<'a> {
                 }
             };
 
-            rounds += 1;
+            rounds = rounds.saturating_add(1);
             prompt_tokens = prompt_tokens.saturating_add(output.prompt_tokens);
             output_tokens = output_tokens.saturating_add(output.output_tokens);
             best_speed = best_speed.max(output.tokens_per_second);
@@ -331,7 +336,7 @@ impl<'a> Agent<'a> {
                 retry_instruction = "First call update_plan with a JSON checklist. Example: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>. Do not answer yet.";
                 continue;
             }
-            if self.config.effort == Effort::Task
+            if self.config.effort.is_task()
                 && output.stop == GenStop::MaxTokens
                 && parsed.calls.is_empty()
             {
@@ -382,7 +387,7 @@ impl<'a> Agent<'a> {
             }
 
             if parsed.calls.is_empty() {
-                if self.config.effort == Effort::Task && plan_nudges < 3 && !plan_complete(session)
+                if self.config.effort.is_task() && plan_nudges < 3 && !plan_complete(session)
                 {
                     plan_nudges += 1;
                     reconcile_next = !session.plan.is_empty();
@@ -413,7 +418,7 @@ impl<'a> Agent<'a> {
                         });
                         continue;
                     }
-                    if self.config.effort == Effort::Task && empty_task_retries < 2 {
+                    if self.config.effort.is_task() && empty_task_retries < 2 {
                         empty_task_retries += 1;
                         thinking = false;
                         retry_instruction = "Your previous response was empty. Continue the task using the available evidence and tools, or explain what is blocked. Do not silently stop.";
@@ -432,7 +437,7 @@ impl<'a> Agent<'a> {
                     }
                     break StopReason::EmptyAnswer;
                 }
-                let content = if self.config.effort == Effort::Task {
+                let content = if self.config.effort.is_task() {
                     let answer = if !plan_all_done(session) {
                         format!("Task incomplete: the checklist has unfinished or blocked steps, or was not created.\n\n{}", parsed.content)
                     } else {
@@ -476,6 +481,22 @@ impl<'a> Agent<'a> {
             session.push(assistant);
             self.checkpoint(session);
 
+            let mut first_call_ok = false;
+            let mut repeated_call = false;
+            if self.config.effort == Effort::Horizon {
+                let call = &calls[0];
+                let mut args: Vec<_> = call.arguments.iter().map(|arg| (&arg.name, &arg.value)).collect();
+                args.sort_unstable();
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                call.name.hash(&mut hasher);
+                args.hash(&mut hasher);
+                let signature = hasher.finish();
+                repeated_call = recent_calls.iter().filter(|&&old| old == signature).count() >= 2;
+                recent_calls.push_back(signature);
+                if recent_calls.len() > 8 {
+                    recent_calls.pop_front();
+                }
+            }
             for (index, call) in calls.iter().enumerate() {
                 if index > 0 {
                     // The model is instructed to issue one call at a time. Do
@@ -491,6 +512,17 @@ impl<'a> Agent<'a> {
                     session.push(result);
                     self.checkpoint(session);
                     retry_instruction = "Issue one tool call at a time and wait for its result before requesting another action.";
+                    continue;
+                }
+                if repeated_call {
+                    let mut result = Message::tool_result(call.id.clone(), "Horizon stopped before repeating this call again. Review prior results and continue manually if appropriate.");
+                    result.tool_status = Some(ToolResultStatus::Failed);
+                    self.events.emit(AgentEvent::ToolMessage {
+                        turn_id: turn_id.clone(),
+                        message: result.clone(),
+                    });
+                    session.push(result);
+                    self.checkpoint(session);
                     continue;
                 }
                 if !tools_for_prompt.iter().any(|tool| tool.name == call.name) {
@@ -511,7 +543,7 @@ impl<'a> Agent<'a> {
                     self.checkpoint(session);
                     continue;
                 }
-                if self.config.effort == Effort::Task && call.name == "web_fetch" {
+                if self.config.effort.is_task() && call.name == "web_fetch" {
                     let key = fetch_key(call.arg("url").unwrap_or(""));
                     if repeated_fetches.get(&key).copied().unwrap_or(0) >= 2 {
                         let detail = "This source was already fetched twice in this task. Use its earlier results or choose a different source; continue the remaining work.";
@@ -541,10 +573,11 @@ impl<'a> Agent<'a> {
                 let ok = self
                     .execute_call(session, &turn_id, call, reconciling_plan)
                     .await;
+                first_call_ok = ok;
                 if call.name == "python_calculate" && ok {
                     python_succeeded = true;
                 }
-                if self.config.effort == Effort::Task {
+                if self.config.effort.is_task() {
                     if call.name == "web_search" || call.name == "web_fetch" {
                         research_streak += 1;
                         if research_streak >= 4 {
@@ -560,7 +593,7 @@ impl<'a> Agent<'a> {
                         research_streak = 0;
                     }
                 }
-                if self.config.effort == Effort::Task && call.name == "update_plan" && ok {
+                if self.config.effort.is_task() && call.name == "update_plan" && ok {
                     let statuses: Vec<_> = session.plan.iter().map(|step| step.status).collect();
                     if !previous_statuses.is_empty()
                         && previous_statuses == statuses
@@ -582,7 +615,7 @@ impl<'a> Agent<'a> {
                 } else if call.name != "update_plan" {
                     unchanged_plan_updates = 0;
                 }
-                if self.config.effort == Effort::Task && call.name == "web_fetch" {
+                if self.config.effort.is_task() && call.name == "web_fetch" {
                     let key = fetch_key(call.arg("url").unwrap_or(""));
                     let count = repeated_fetches.entry(key).or_default();
                     *count += 1;
@@ -602,10 +635,19 @@ impl<'a> Agent<'a> {
                 break StopReason::Cancelled;
             }
 
-            if rounds >= self.config.max_tool_rounds {
+            if self.config.effort == Effort::Horizon {
+                failed_calls = if first_call_ok { 0 } else { failed_calls.saturating_add(1) };
+            }
+            let stalled = self.config.effort == Effort::Horizon
+                && (repeated_call || failed_calls >= 4);
+            if stalled || (self.config.effort != Effort::Horizon && rounds >= self.config.max_tool_rounds) {
                 // Give the model one final chance with tools removed, so the
                 // user gets a summary instead of silence.
-                let notice = "Tool budget reached. Answer now using the information you already have; do not call tools.";
+                let notice = if stalled {
+                    "Tool use stopped because calls were repeated or failed. Summarize verified work and what remains blocked; do not call tools or claim unverified work is complete."
+                } else {
+                    "Tool budget reached. Answer now using the information you already have; do not call tools."
+                };
                 let output = match self
                     .generate_with_retry(
                         session,
@@ -618,19 +660,21 @@ impl<'a> Agent<'a> {
                     .await
                 {
                     Ok(output) => output,
-                    Err(_) => break StopReason::ToolBudget,
+                    Err(_) => break if stalled { StopReason::Stalled } else { StopReason::ToolBudget },
                 };
                 output_tokens = output_tokens.saturating_add(output.output_tokens);
                 prompt_tokens = prompt_tokens.saturating_add(output.prompt_tokens);
                 best_speed = best_speed.max(output.tokens_per_second);
                 let parsed = parse_reply(&output.text, thinking);
                 let content = if parsed.content.trim().is_empty() {
-                    "Tool limit reached before I could summarise.".to_string()
+                    "Stopped before I could summarise.".to_string()
                 } else {
                     parsed.content
                 };
-                let content = if self.config.effort == Effort::Task {
-                    let answer = if !plan_all_done(session) {
+                let content = if self.config.effort.is_task() {
+                    let answer = if stalled {
+                        format!("Task stopped: repeated or unsuccessful tool calls suggest a loop. Review the checklist and results before continuing; productivity is not verified.\n\n{content}")
+                    } else if !plan_all_done(session) {
                         format!("Task incomplete: the tool budget was reached before all checklist steps were done.\n\n{content}")
                     } else {
                         content
@@ -648,7 +692,7 @@ impl<'a> Agent<'a> {
                 });
                 session.push(message);
                 self.checkpoint(session);
-                break StopReason::ToolBudget;
+                break if stalled { StopReason::Stalled } else { StopReason::ToolBudget };
             }
         };
 
@@ -842,7 +886,7 @@ impl<'a> Agent<'a> {
                     return Ok(output);
                 }
                 Err(err @ CoreError::ContextOverflow { .. }) => {
-                    let max_attempts = if self.config.effort == Effort::Task {
+                    let max_attempts = if self.config.effort.is_task() {
                         6
                     } else {
                         4
@@ -857,7 +901,7 @@ impl<'a> Agent<'a> {
                         self.events.emit(AgentEvent::Notice {
                             message: "Removed the oldest turn from context.".to_string(),
                         });
-                    } else if self.config.effort == Effort::Task
+                    } else if self.config.effort.is_task()
                         && keep_current_thinking
                         && session
                             .messages
@@ -889,7 +933,7 @@ impl<'a> Agent<'a> {
                         });
                     } else {
                         let reduced = (tool_result_limit / 2).max(512);
-                        let can_reduce = self.config.effort == Effort::Task
+                        let can_reduce = self.config.effort.is_task()
                             && reduced < tool_result_limit
                             && session.messages.iter().any(|m| {
                                 m.role == crate::session::Role::Tool
@@ -929,7 +973,7 @@ impl<'a> Agent<'a> {
         }
         if tools.iter().any(|tool| tool.name == "python_calculate") {
             system.push_str("\n\nFor Python calculations use python_calculate with code that prints results. It executes in memory without host files; do not save temporary scripts in the workspace. Check that the code implements the correct formula, use the actual returned values in your final answer, and verify that any inequalities support the conclusion.\n");
-            if self.config.effort == Effort::Task {
+            if self.config.effort.is_task() {
                 system.push_str("For multistep arithmetic, use python_calculate to print intermediate values, carry them into the next step, and check units and magnitude before reporting the answer.\n");
             }
         }
@@ -948,7 +992,7 @@ impl<'a> Agent<'a> {
             system.push_str("\n\n");
             system.push_str(system_suffix);
         }
-        if self.config.effort == Effort::Task && session.plan.is_empty() {
+        if self.config.effort.is_task() && session.plan.is_empty() {
             system.push_str("\n\nBefore other tools, create a task-specific checklist. Example format: <tool_call><function=update_plan><parameter=steps>[{\"title\":\"Inspect inputs\",\"status\":\"running\"},{\"title\":\"Complete and verify work\",\"status\":\"pending\"}]</parameter></function></tool_call>\n");
         }
         if !session.plan.is_empty() {

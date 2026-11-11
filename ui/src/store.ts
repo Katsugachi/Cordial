@@ -115,6 +115,8 @@ export function showsChat(state: AppState): boolean {
 
 export function stopNotice(stop: StopReason): string | null {
   switch (stop) {
+    case "stalled":
+      return "Horizon stopped after repeated or unsuccessful tool calls.";
     case "tool_budget":
       return "Tool limit reached.";
     case "context_full":

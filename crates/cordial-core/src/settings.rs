@@ -36,6 +36,8 @@ pub enum Effort {
     High,
     /// Long-horizon autonomous work with a visible checklist.
     Task,
+    /// Extended checklist work with no fixed tool-round limit.
+    Horizon,
 }
 
 impl Effort {
@@ -45,17 +47,25 @@ impl Effort {
             Effort::Medium => "Medium",
             Effort::High => "High",
             Effort::Task => "Task",
+            Effort::Horizon => "Horizon",
         }
     }
 
-    /// Maximum number of tool-call rounds inside a single user turn.
+    /// Maximum rounds for fixed-budget modes. Horizon bypasses this limit;
+    /// its u32::MAX value is a compatibility sentinel, not a quota.
     pub fn max_tool_rounds(self) -> u32 {
         match self {
             Effort::Low => 3,
             Effort::Medium => 8,
             Effort::High => 16,
             Effort::Task => 96,
+            Effort::Horizon => u32::MAX,
         }
+    }
+
+    /// Whether this mode uses the task checklist and reporting safeguards.
+    pub fn is_task(self) -> bool {
+        matches!(self, Self::Task | Self::Horizon)
     }
 
     /// Maximum search results folded into context per search call.
@@ -64,7 +74,7 @@ impl Effort {
             Effort::Low => 3,
             Effort::Medium => 5,
             Effort::High => 8,
-            Effort::Task => 8,
+            Effort::Task | Effort::Horizon => 8,
         }
     }
 
@@ -77,7 +87,7 @@ impl Effort {
             Effort::Low => 512,
             Effort::Medium => 1_536,
             Effort::High => 3_072,
-            Effort::Task => 4_096,
+            Effort::Task | Effort::Horizon => 4_096,
         }
     }
 
@@ -87,7 +97,7 @@ impl Effort {
             Effort::Low => 4_000,
             Effort::Medium => 10_000,
             Effort::High => 24_000,
-            Effort::Task => 32_000,
+            Effort::Task | Effort::Horizon => 32_000,
         }
     }
 
@@ -97,7 +107,7 @@ impl Effort {
             Effort::Low => 0.1,
             Effort::Medium => 0.1,
             Effort::High => 0.2,
-            Effort::Task => 0.1,
+            Effort::Task | Effort::Horizon => 0.1,
         }
     }
 
@@ -112,6 +122,9 @@ impl Effort {
             }
             Effort::High => {
                 "Effort: high. Answer thoroughly but stay concise. Prefer two sources when facts matter."
+            }
+            Effort::Horizon => {
+                "Effort: horizon. Work autonomously through a visible checklist. Use tools as needed, avoid repeated or failed actions, verify outputs, and report incomplete or blocked work honestly."
             }
             Effort::Task => {
                 "Effort: task. Work autonomously through a visible checklist. Call update_plan first, keep one step running, verify outputs, mark steps done, and report only when the plan is complete or blocked."
@@ -204,6 +217,15 @@ mod tests {
         let old_missing: Settings = serde_json::from_str("{}").unwrap();
         assert!(old_enabled.web_enabled);
         assert!(!old_missing.web_enabled);
+    }
+
+    #[test]
+    fn horizon_settings_round_trip() {
+        let settings = Settings { effort: Effort::Horizon, ..Settings::default() };
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("\"horizon\""));
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
+        assert!(Effort::Horizon.is_task());
     }
 
     #[test]

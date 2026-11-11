@@ -574,7 +574,7 @@ export function mount(root: HTMLElement, bridge: Bridge): void {
 
   root.addEventListener("change", (event) => {
     const select = event.target as HTMLSelectElement;
-    if (select.id === "effort-select" && ["low", "medium", "high", "task"].includes(select.value)) {
+    if (select.id === "effort-select" && ["low", "medium", "high", "task", "horizon"].includes(select.value)) {
       void persistSettings({ ...state.settings, effort: select.value as Effort });
     } else if (select.id === "permission-select" && ["auto", "manual"].includes(select.value)) {
       void persistSettings({ ...state.settings, permission_mode: select.value as PermissionMode });

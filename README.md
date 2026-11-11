@@ -37,8 +37,12 @@ restricted networks.
   progress, but does not automatically resume after an exit. A completed plan is
   the model's report, not independent verification. The isolated Python calculator
   is available only in an [experimental build](docs/python-sandbox.md).
-- **Adjusts effort.** Low / Medium / High cap tool rounds, output tokens and page
-  reads. Low effort also switches reasoning off.
+- **Adjusts effort.** Low / Medium / High / Task cap tool rounds. Horizon uses
+  the Task checklist without a fixed round cap and stops on obvious repeated calls
+  or consecutive failures. These heuristics can stop useful work or miss wasteful
+  work; successful calls do not prove progress. Context, approvals, cancellation,
+  per-call resource limits and model errors still apply. Horizon does not resume
+  automatically after exit. Low effort also switches reasoning off.
 - **Runs locally.** No telemetry, analytics or accounts. The model is downloaded
   on first launch. When enabled, web tools can send requests to external sites.
 
