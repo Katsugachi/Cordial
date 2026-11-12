@@ -1384,3 +1384,26 @@ async fn horizon_stops_after_consecutive_distinct_failures() {
         .content
         .contains("Task stopped"));
 }
+
+#[tokio::test]
+async fn unconfirmed_source_gets_one_review_then_a_warning() {
+    let fixture = Fixture::new("source-provenance");
+    let mut session = Session::new();
+    let plan = r#"<tool_call><function=update_plan><parameter=steps>[{"title":"Answer","status":"done"}]</parameter></function></tool_call>"#;
+    let answer = "Source: https://example.org/article";
+    let mut cfg = config(Effort::Task, PermissionMode::Auto);
+    cfg.web_enabled = true;
+    let (result, events) = run_turn(&fixture, vec![plan, answer, answer], cfg, &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::Notice { message } if message.contains("Reviewing unconfirmed"))).count(), 1);
+    assert!(session.messages.last().unwrap().content.contains("not confirmed as opened in this turn"));
+}
+
+#[tokio::test]
+async fn unconfirmed_source_warning_applies_when_web_is_disabled() {
+    let fixture = Fixture::new("source-offline");
+    let mut session = Session::new();
+    let (result, _) = run_turn(&fixture, vec!["See https://example.org/"], config(Effort::Medium, PermissionMode::Auto), &mut session, None).await;
+    assert_eq!(result.stop, StopReason::Answered);
+    assert!(session.messages.last().unwrap().content.contains("not confirmed as opened in this turn"));
+}

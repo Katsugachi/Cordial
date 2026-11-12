@@ -271,3 +271,10 @@ results (245.04, 64.16 and 512) also contradicted parts of its final answer.
 Both used Python without leaving script files. Rust, UI, desktop, inference and
 sandbox jobs passed; research was not run on this commit. These are model
 failures, not failures of the earlier context probe.
+
+A source-provenance safeguard asks Task/Horizon to review unconfirmed links
+once and warns on final answers containing links not confirmed opened in the
+current turn. Only successful page-fetch results and browser page snapshots
+count; search snippets, failed requests and prior turns do not. This is a
+conservative heuristic, not source verification: URLs can refer to redirects,
+may be incorrectly parsed, and opened pages may not support the associated claim.

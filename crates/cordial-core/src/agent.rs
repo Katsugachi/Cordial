@@ -5,7 +5,7 @@
 //! budget runs out. Cancellation, context overflow and empty answers are handled
 //! here so the UI only ever sees clean events.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -80,6 +80,44 @@ fn fetch_key(raw: &str) -> String {
             url.to_string()
         }
         Err(_) => raw.to_string(),
+    }
+}
+
+// This is provenance only, not a claim that the page supports an answer.
+// Search results, failed calls and prior turns do not count as opening a page.
+fn unopened_urls(answer: &str, session: &Session) -> usize {
+    let last_user = session.messages.iter().rposition(|m| m.role == Role::User);
+    let current = &session.messages[last_user.map_or(0, |i| i + 1)..];
+    let calls: HashMap<_, _> = current.iter().flat_map(|m| &m.tool_calls)
+        .map(|call| (call.id.as_str(), call.name.as_str())).collect();
+    let mut opened = HashSet::new();
+    for result in current.iter().filter(|m| m.role == Role::Tool && m.tool_status == Some(ToolResultStatus::Ok)) {
+        let Some(name) = result.tool_call_id.as_deref().and_then(|id| calls.get(id)).copied() else { continue };
+        let url = if name == "web_fetch" {
+            result.content.strip_prefix("Text of ").and_then(|s| s.lines().next()).and_then(|s| s.strip_suffix(':'))
+        } else if matches!(name, "browser_open" | "browser_click" | "browser_type" | "browser_view") {
+            result.content.lines().nth(1).and_then(|s| s.strip_prefix("URL: "))
+        } else { None };
+        if let Some(url) = url {
+            if let Ok(parsed) = url::Url::parse(url) {
+                if matches!(parsed.scheme(), "http" | "https") { opened.insert(fetch_key(url)); }
+            }
+        }
+    }
+    let regex = regex::Regex::new(r#"https?://[^\s<>\[\]"']+"#).expect("static URL regex");
+    let mut urls = HashSet::new();
+    for found in regex.find_iter(answer) {
+        let url = found.as_str().trim_end_matches(['.', ',', ';', ':', ')', '}', '!']);
+        if let Ok(parsed) = url::Url::parse(url) {
+            if matches!(parsed.scheme(), "http" | "https") { urls.insert(fetch_key(url)); }
+        }
+    }
+    urls.difference(&opened).count()
+}
+
+fn source_provenance_notice(answer: String, session: &Session) -> String {
+    if unopened_urls(&answer, session) == 0 { answer } else {
+        format!("{answer}\n\nSource status: one or more links in this answer were not confirmed as opened in this turn. Even an opened page may not support the claim; check sources independently.")
     }
 }
 
@@ -232,6 +270,7 @@ impl<'a> Agent<'a> {
         let mut tool_context = (self.config.max_tool_result_chars, true, true);
         let mut repeated_fetches: HashMap<String, u32> = HashMap::new();
         let mut python_succeeded = false;
+        let mut citation_retry = false;
         // Bounded, heuristic loop detection: identical calls and failures can
         // indicate stalling, but successful or novel calls are not proof of progress.
         let mut recent_calls = VecDeque::new();
@@ -355,6 +394,7 @@ impl<'a> Agent<'a> {
                     "Task incomplete: the response was cut off by the output limit.\n\n{}",
                     parsed.content
                 ));
+                let content = source_provenance_notice(content, session);
                 let content =
                     python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
@@ -435,6 +475,17 @@ impl<'a> Agent<'a> {
                     }
                     break StopReason::EmptyAnswer;
                 }
+                if self.config.effort.is_task()
+                    && self.config.web_enabled
+                    && !citation_retry
+                    && unopened_urls(&parsed.content, session) > 0
+                {
+                    citation_retry = true;
+                    retry_instruction = "Review the source links in your answer. Cite only sources actually opened in this turn; otherwise clearly say the source was not checked. Do not claim a search result was opened.";
+                    self.events.emit(AgentEvent::GenerationReset { turn_id: turn_id.clone() });
+                    self.events.emit(AgentEvent::Notice { message: "Reviewing unconfirmed source links.".to_string() });
+                    continue;
+                }
                 let content = if self.config.effort.is_task() {
                     let answer = if !plan_all_done(session) {
                         format!("Task incomplete: the checklist has unfinished or blocked steps, or was not created.\n\n{}", parsed.content)
@@ -445,6 +496,7 @@ impl<'a> Agent<'a> {
                 } else {
                     parsed.content
                 };
+                let content = source_provenance_notice(content, session);
                 let content =
                     python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
@@ -697,6 +749,7 @@ impl<'a> Agent<'a> {
                 } else {
                     content
                 };
+                let content = source_provenance_notice(content, session);
                 let content =
                     python_execution_notice(content, &original_user_text, python_succeeded);
                 let message = Message::assistant(content, parsed.thinking, vec![]);
@@ -1290,6 +1343,44 @@ mod context_compaction_tests {
             ),
             "Python is a programming language."
         );
+    }
+
+    #[test]
+    fn source_provenance_requires_successful_current_turn_page_open() {
+        use crate::session::ToolArgument;
+        let mut session = Session::new();
+        session.push(Message::user("Research", vec![]));
+        let call = ToolCall { id: "one".into(), name: "web_fetch".into(), arguments: vec![ToolArgument { name: "url".into(), value: "https://example.org/page".into() }] };
+        session.push(Message::assistant("", None, vec![call]));
+        let mut result = Message::tool_result("one", "Text of https://example.org/page:\n\nEvidence");
+        result.tool_status = Some(ToolResultStatus::Failed);
+        session.push(result);
+        let answer = "Source [link](https://example.org/page#section).";
+        assert_eq!(unopened_urls(answer, &session), 1);
+        session.messages.last_mut().unwrap().tool_status = Some(ToolResultStatus::Ok);
+        assert_eq!(unopened_urls(answer, &session), 0);
+        assert_eq!(unopened_urls("https://example.org/page?different=1", &session), 1);
+        session.push(Message::user("Next turn", vec![]));
+        assert_eq!(unopened_urls(answer, &session), 1);
+        let call = ToolCall { id: "two".into(), name: "browser_open".into(), arguments: vec![] };
+        session.push(Message::assistant("", None, vec![call]));
+        let mut result = Message::tool_result("two", "Page: Example\nURL: https://example.org/page\n\nText");
+        result.tool_status = Some(ToolResultStatus::Ok);
+        session.push(result);
+        assert_eq!(unopened_urls(answer, &session), 0);
+        assert!(source_provenance_notice("https://unopened.example/".into(), &session).contains("not confirmed as opened"));
+    }
+
+    #[test]
+    fn search_results_are_not_opened_sources() {
+        let mut session = Session::new();
+        session.push(Message::user("Research", vec![]));
+        let call = ToolCall { id: "search".into(), name: "web_search".into(), arguments: vec![] };
+        session.push(Message::assistant("", None, vec![call]));
+        let mut result = Message::tool_result("search", "Text of https://example.org/:\nsearch snippet");
+        result.tool_status = Some(ToolResultStatus::Ok);
+        session.push(result);
+        assert_eq!(unopened_urls("https://example.org/", &session), 1);
     }
 
     #[test]
