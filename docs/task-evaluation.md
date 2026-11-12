@@ -278,3 +278,18 @@ current turn. Only successful page-fetch results and browser page snapshots
 count; search snippets, failed requests and prior turns do not. This is a
 conservative heuristic, not source verification: URLs can refer to redirects,
 may be incorrectly parsed, and opened pages may not support the associated claim.
+
+[Run 43308693038](https://github.com/Katsugachi/Cordial/actions/runs/43308693038)
+tested source-provenance safeguards and the full-page PDF with 32,768-token
+context, seed 359020088. Ordinary jobs passed, but both live evaluations failed.
+The PDF answer gave 245.04 cm² for the cone, said a 46 cm rod did not fit
+despite a 47.17 cm diagonal, and treated the cube's 8 cm diagonal as a side,
+giving 512 cm³; the plan was 1/3. Python was called and no scripts remained.
+For architecture the reported area 336 m², perimeter 74 m, 148 packs and
+$7,104 matched the key, but the answer jumped from 134.4 packs to 148 without
+explaining the waste factor and compared square area and linear perimeter as
+if their numerical magnitudes were meaningful; no checklist was created. The
+English task searched repeatedly and exhausted its budget with no substantive
+answer. This run does not demonstrate that the citation review improves
+research correctness: different seeds and task outcomes prevent a controlled
+comparison, and an opened page is not proof that it supports a claim.
