@@ -54,12 +54,10 @@ def request(messages, seed):
     with urllib.request.urlopen(req, timeout=1800) as response:
         body = json.load(response)
     choice = body['choices'][0]
-    if choice.get('finish_reason') != 'stop':
-        raise RuntimeError(f"generation did not finish normally: {choice.get('finish_reason')}")
     content = choice['message'].get('content')
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError('model returned no text')
-    return content
+    return content, choice.get('finish_reason')
 
 
 def main():
@@ -103,8 +101,9 @@ def main():
             ]
             passed = True
             for label, content, check in questions:
-                answer = request([{'role': 'user', 'content': content}], seed)
-                ok = check(answer)
+                answer, finish = request([{'role': 'user', 'content': content}], seed)
+                ok = finish == 'stop' and check(answer)
+                print(f'EVAL candidate {label} finish={finish}', flush=True)
                 passed &= ok
                 record(label, answer, ok)
                 print(f'EVAL candidate {label} screen={ok} answer={answer!r}', flush=True)
@@ -118,10 +117,11 @@ def main():
                           lambda a: has_near(a, 98.534, 0.1)]
                 for index, check in enumerate(checks, 1):
                     crop = Path(f'{prefix}-{index}.png').read_bytes()
-                    content = [{'type': 'text', 'text': f'Answer only question {index} shown in this region of the worksheet. Explain your reasoning. Python and web tools are unavailable; do not claim to have used them.'},
+                    content = [{'type': 'text', 'text': f'Answer only question {index} shown in this region of the worksheet. Explain your reasoning concisely. Python and web tools are unavailable; do not claim to have used them.'},
                                {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(crop).decode()}}]
-                    answer = request([{'role': 'user', 'content': content}], seed)
-                    ok = check(answer)
+                    answer, finish = request([{'role': 'user', 'content': content}], seed)
+                    ok = finish == 'stop' and check(answer)
+                    print(f'EVAL candidate region-{index} finish={finish}', flush=True)
                     record(f'region-{index}', answer, ok)
                     print(f'EVAL candidate region-{index} screen={ok} answer={answer!r}', flush=True)
                     print(f'::notice title=Candidate region {index}::{answer[:2500].replace("%", "%25").replace(chr(10), "%0A").replace(chr(13), "%0D")}', flush=True)

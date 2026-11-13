@@ -1,5 +1,7 @@
+import io
 import unittest
-from candidate_model_eval import numbers, pdf_screen, architecture_screen, english_screen
+from unittest.mock import patch
+from candidate_model_eval import numbers, pdf_screen, architecture_screen, english_screen, request
 
 
 class CandidateScreenTests(unittest.TestCase):
@@ -10,6 +12,11 @@ class CandidateScreenTests(unittest.TestCase):
         self.assertTrue(architecture_screen('Area 336, perimeter 74, packs 148, cost $7,104'))
         self.assertFalse(architecture_screen('336 74 148 71040'))
         self.assertEqual(numbers('cost 7,104.50 and 74'), [7104.5, 74.0])
+
+    def test_truncated_generation_remains_available_for_diagnostics(self):
+        payload = b'{"choices":[{"finish_reason":"length","message":{"content":"partial"}}]}'
+        with patch("urllib.request.urlopen", return_value=io.BytesIO(payload)):
+            self.assertEqual(request([], 1), ("partial", "length"))
 
     def test_english(self):
         self.assertTrue(english_screen('Personification and metaphor. Shakespeare, 1609.'))
