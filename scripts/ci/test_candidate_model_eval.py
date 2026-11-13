@@ -28,6 +28,18 @@ class CandidateScreenTests(unittest.TestCase):
             self.assertEqual(python_pdf_screen('question', 7), ('Four.', 'stop', 1))
             self.assertEqual(requests.call_args.args[0][-1]['content'], '4')
 
+    def test_parallel_calls_only_execute_first(self):
+        def call(i):
+            return {'id': str(i), 'type': 'function', 'function': {'name': 'python_calculate', 'arguments': '{"code":"print(2+2)"}'}}
+        replies = [
+            {'finish_reason': 'tool_calls', 'message': {'role': 'assistant', 'tool_calls': [call(1), call(2)]}},
+            {'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'Four.'}},
+        ]
+        with patch('candidate_model_eval.tool_request', side_effect=replies) as requests, patch('candidate_model_eval.run_python', return_value={'ok': True, 'text': '4'}) as run:
+            self.assertEqual(python_pdf_screen('question', 7), ('Four.', 'stop', 1))
+            self.assertEqual(run.call_count, 1)
+            self.assertIn('not executed', requests.call_args.args[0][-1]['content'])
+
     def test_english(self):
         self.assertTrue(english_screen('Personification and metaphor. Shakespeare, 1609.'))
         self.assertFalse(english_screen('Personification and metaphor. Shakespeare, 1610.'))

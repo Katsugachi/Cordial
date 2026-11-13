@@ -92,23 +92,29 @@ def python_pdf_screen(content, seed):
         calls = message.get('tool_calls') or []
         if not calls:
             return message.get('content') or '', choice.get('finish_reason'), successful
-        if len(calls) != 1:
-            raise RuntimeError('candidate requested multiple simultaneous tools')
-        call = calls[0]
-        function = call.get('function', {})
-        arguments = function.get('arguments', '{}')
-        arguments = json.loads(arguments) if isinstance(arguments, str) else arguments
-        if function.get('name') != 'python_calculate' or not isinstance(arguments, dict):
-            raise RuntimeError('candidate requested an unsupported tool')
-        code = arguments.get('code')
-        result = run_python(code)
-        successful += int(result.get('ok') is True)
-        diagnostic = json.dumps({'code': code, 'result': result})
-        print('EVAL candidate Python ' + diagnostic, flush=True)
-        safe = diagnostic[:2500].replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
-        print(f'::notice title=Candidate Python call::{safe}', flush=True)
+        # Mirror Cordial's one-call-at-a-time policy: only the first call is
+        # executed; every other call receives an explicit non-execution result.
         messages.append(message)
-        messages.append({'role': 'tool', 'tool_call_id': call['id'], 'content': result.get('text', '')})
+        for index, call in enumerate(calls):
+            call_id = call.get('id')
+            if not isinstance(call_id, str) or not call_id:
+                raise RuntimeError('candidate tool call has no id')
+            if index > 0:
+                result = {'ok': False, 'text': 'Only one tool call may run per response. This call was not executed; review the first result.'}
+            else:
+                function = call.get('function', {})
+                arguments = function.get('arguments', '{}')
+                arguments = json.loads(arguments) if isinstance(arguments, str) else arguments
+                if function.get('name') != 'python_calculate' or not isinstance(arguments, dict):
+                    raise RuntimeError('candidate requested an unsupported tool')
+                code = arguments.get('code')
+                result = run_python(code)
+                successful += int(result.get('ok') is True)
+                diagnostic = json.dumps({'code': code, 'result': result})
+                print('EVAL candidate Python ' + diagnostic, flush=True)
+                safe = diagnostic[:2500].replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+                print(f'::notice title=Candidate Python call::{safe}', flush=True)
+            messages.append({'role': 'tool', 'tool_call_id': call_id, 'content': result.get('text', '')})
     raise RuntimeError('candidate exceeded six tool-response rounds')
 
 

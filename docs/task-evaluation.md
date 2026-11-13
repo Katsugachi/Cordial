@@ -320,3 +320,11 @@ as 75.40 cm² but incorrectly described the formula as excluding the base; the
 rod answer was correct; the cube used the right symbolic formula but gave
 94.868 cm³ instead of 98.534 cm³. No Python or research tools were available.
 The standalone screens are not a substitute for an integrated agent evaluation.
+
+[Run 43436034852](https://github.com/Katsugachi/Cordial/actions/runs/43436034852)
+built the real isolated calculator bridge, but the candidate initially requested
+multiple tool calls in one response and the diagnostic stopped before running
+any. The diagnostic has been revised to mirror Cordial's existing rule: execute
+only the first call and explicitly report that the others were not executed.
+This standalone bridge is not production integration; it never invokes a host
+shell or writes model-generated Python to a script file.
