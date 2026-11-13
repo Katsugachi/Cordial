@@ -29,6 +29,7 @@ EXPECTED = {
         "inference-stack": MEDIUM,
         "live-model": MEDIUM,
         "research-evaluation": MEDIUM,
+        "candidate-model": MEDIUM,
     },
     "format.yml": {"rustfmt": MEDIUM},
     "live.yml": {"behaviour": MEDIUM},
