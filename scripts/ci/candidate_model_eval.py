@@ -42,7 +42,8 @@ def architecture_screen(answer):
 
 def english_screen(answer):
     lower = answer.lower()
-    return all(term in lower for term in ('personification', 'metaphor', 'shakespeare', '1609'))
+    return (all(term in lower for term in ('personification', 'metaphor', 'shakespeare', '1609'))
+            and 'first folio' not in lower and 'simile' not in lower)
 
 
 def request(messages, seed):
@@ -69,6 +70,12 @@ def main():
     text = Path(os.environ['CORDIAL_PDF_PAGE_TEXT']).read_text()
     seed = int(os.environ.get('CORDIAL_LIVE_SEED', '0')) % (2**32 - 1)
     log_path = Path(os.environ['CANDIDATE_SERVER_LOG'])
+    report = Path(os.environ['CANDIDATE_REPORT_PATH'])
+    report.write_text('')
+
+    def record(label, answer, ok):
+        with report.open('a') as output:
+            output.write(json.dumps({'label': label, 'screen': ok, 'answer': answer}) + '\n')
     with log_path.open('w') as log:
         process = subprocess.Popen([server, '-m', weights, '--mmproj', projector,
                                     '--host', '127.0.0.1', '--port', '18964',
@@ -99,8 +106,25 @@ def main():
                 answer = request([{'role': 'user', 'content': content}], seed)
                 ok = check(answer)
                 passed &= ok
+                record(label, answer, ok)
                 print(f'EVAL candidate {label} screen={ok} answer={answer!r}', flush=True)
                 print(f'::notice title=Candidate {label}::{answer[:2500].replace("%", "%25").replace(chr(10), "%0A").replace(chr(13), "%0D")}', flush=True)
+            # Regional images are a diagnostic only, not the desktop PDF path.
+            # Evaluate independently even if the full-page screening failed.
+            prefix = os.environ.get('CANDIDATE_REGION_PREFIX')
+            if prefix:
+                checks = [lambda a: has_near(a, 75.398, 0.1),
+                          lambda a: has_near(a, 47.17, 0.1) and 'fit' in a.lower() and not re.search(r'(?:not|doesn.t|cannot|can.t)\s+fit', a.lower()),
+                          lambda a: has_near(a, 98.534, 0.1)]
+                for index, check in enumerate(checks, 1):
+                    crop = Path(f'{prefix}-{index}.png').read_bytes()
+                    content = [{'type': 'text', 'text': f'Answer only question {index} shown in this region of the worksheet. Explain your reasoning. Python and web tools are unavailable; do not claim to have used them.'},
+                               {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(crop).decode()}}]
+                    answer = request([{'role': 'user', 'content': content}], seed)
+                    ok = check(answer)
+                    record(f'region-{index}', answer, ok)
+                    print(f'EVAL candidate region-{index} screen={ok} answer={answer!r}', flush=True)
+                    print(f'::notice title=Candidate region {index}::{answer[:2500].replace("%", "%25").replace(chr(10), "%0A").replace(chr(13), "%0D")}', flush=True)
             if not passed:
                 raise SystemExit('Candidate screening failed; no production or release claim.')
         finally:

@@ -479,6 +479,8 @@ jobs:
             CORDIAL_PDF_RENDER_PATH="$RUNNER_TEMP/worksheet.png" \
             CORDIAL_PDF_TEXT_PATH="$RUNNER_TEMP/worksheet.txt" \
             npm --prefix ui test -- --run tests/pdf.test.ts
+          node --test scripts/ci/test_pdf_crops.mjs
+          node scripts/ci/pdf_crops.mjs "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/candidate-region"
       - name: Screen candidate model without tools
         timeout-minutes: 90
         env:
@@ -486,10 +488,19 @@ jobs:
           CANDIDATE_WEIGHTS: ${{ runner.temp }}/candidate.gguf
           CANDIDATE_PROJECTOR: ${{ runner.temp }}/candidate-mmproj.gguf
           CANDIDATE_SERVER_LOG: ${{ runner.temp }}/candidate-server.log
+          CANDIDATE_REPORT_PATH: ${{ runner.temp }}/candidate-report.jsonl
+          CANDIDATE_REGION_PREFIX: ${{ runner.temp }}/candidate-region
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt
           CORDIAL_LIVE_SEED: ${{ github.run_id }}
         run: python3 scripts/ci/candidate_model_eval.py
+      - name: Upload candidate answers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-screening-report
+          path: ${{ runner.temp }}/candidate-report.jsonl
+          if-no-files-found: ignore
       - name: Upload candidate server log
         if: always()
         uses: actions/upload-artifact@v4
@@ -499,4 +510,4 @@ jobs:
           if-no-files-found: ignore
       - name: Remove worksheet renders
         if: always()
-        run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt"
+        run: rm -f "$RUNNER_TEMP/worksheet.pdf" "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/worksheet.txt" "$RUNNER_TEMP/candidate-region-1.png" "$RUNNER_TEMP/candidate-region-2.png" "$RUNNER_TEMP/candidate-region-3.png"

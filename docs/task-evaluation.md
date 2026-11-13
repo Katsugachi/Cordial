@@ -293,3 +293,22 @@ English task searched repeatedly and exhausted its budget with no substantive
 answer. This run does not demonstrate that the citation review improves
 research correctness: different seeds and task outcomes prevent a controlled
 comparison, and an opened page is not proof that it supports a claim.
+
+### Larger local vision candidate
+
+With user approval, [run 43429779002](https://github.com/Katsugachi/Cordial/actions/runs/43429779002)
+screened Qwen3-VL-4B-Instruct (official Q4_K_M weights and Q8 projector,
+about 2.95 GB combined) on CPU using pinned llama.cpp b12020 and the candidate's
+own GGUF chat template. Downloads were pinned by revision and SHA-256. This
+was a standalone, tool-free screening, not Cordial integration or release
+validation. On the full-page PDF it misread the 6 cm diameter as a 6 cm radius,
+and gave a wrong cone area; the box result was correct and the cube answer
+used the correct diagonal formula but contained inconsistent intermediate
+arithmetic. Architecture's area, perimeter, waste, pack count and cost were
+correct. The English answer correctly named Shakespeare and 1609, but wrongly
+attributed the sonnet to the First Folio and called a metaphor a simile. The
+simple original English keyword screen missed these mistakes; it has since
+been strengthened, but still cannot establish semantic correctness. The
+candidate failed the screening and has not been selected for Cordial.
+Subsequent isolated-region diagnostics are not representative of the normal
+full-page desktop path and do not satisfy the Python or research requirements.

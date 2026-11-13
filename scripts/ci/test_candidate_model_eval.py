@@ -14,6 +14,8 @@ class CandidateScreenTests(unittest.TestCase):
     def test_english(self):
         self.assertTrue(english_screen('Personification and metaphor. Shakespeare, 1609.'))
         self.assertFalse(english_screen('Personification and metaphor. Shakespeare, 1610.'))
+        self.assertFalse(english_screen('Personification and metaphor, Shakespeare, 1609 First Folio.'))
+        self.assertFalse(english_screen('Personification and metaphor, Shakespeare, 1609. Implied simile.'))
 
 
 if __name__ == '__main__':
