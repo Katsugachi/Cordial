@@ -349,3 +349,17 @@ base diagonal, and gave cube 512 cm³. On architecture, it gave 2 packs and
 $96 where the key was 165 packs and $7,920; English exhausted its tool budget.
 Ordinary Rust, sandbox, UI, inference and desktop checks passed. This does not
 show an improvement in task accuracy.
+
+[Run 43452079432](https://github.com/Katsugachi/Cordial/actions/runs/43452079432)
+screened official Qwen3-VL-8B-Instruct Q4_K_M with its Q8 projector in the
+standalone CPU diagnostic (about 5.78 GB of model files). Its full-page
+answer used the correct geometry but calculated the cube as 98.529 cm³ rather
+than 98.534; the isolated cube screen similarly miscalculated. Architecture
+and English screening answers were correct on their narrow checks. In the
+Python diagnostic it first returned a bare expression, then printed correct
+cone, box and cube values using the real isolated interpreter. The diagnostic
+job nevertheless failed without a final answer annotation, so those successful
+calls do not establish that it completed the task or passed the screen. Job
+logs were inaccessible due to an EOF from the GitHub log service. This candidate
+is not integrated into Cordial, and these results are not agent, checklist,
+research or release validation.
