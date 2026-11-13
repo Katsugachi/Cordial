@@ -143,5 +143,7 @@ if __name__ == '__main__':
     try:
         main()
     except (KeyError, OSError, ValueError, TimeoutError, RuntimeError, json.JSONDecodeError) as error:
+        message = str(error).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+        print(f'::error title=Candidate screening error::{message}', flush=True)
         print(f'Candidate screening error: {error}', file=sys.stderr, flush=True)
         sys.exit(1)
