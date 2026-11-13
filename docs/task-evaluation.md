@@ -328,3 +328,14 @@ any. The diagnostic has been revised to mirror Cordial's existing rule: execute
 only the first call and explicitly report that the others were not executed.
 This standalone bridge is not production integration; it never invokes a host
 shell or writes model-generated Python to a script file.
+
+[Run 43439053814](https://github.com/Katsugachi/Cordial/actions/runs/43439053814)
+executed the candidate's calls using the experimental isolated Python runtime.
+The candidate supplied bare final expressions instead of `print`, so four
+successful executions produced no visible values. It also used radius 6 cm for
+the cone. The bounded tool diagnostic failed before a final answer could be
+assessed. A successful interpreter call is not evidence of a useful result or
+correct assumptions. The calculator now explicitly says when output is empty
+and advises `print`, while retaining the truthful success status and fresh-state
+semantics. This is an experimentally motivated correction, not a guarantee that
+models will use the result correctly.

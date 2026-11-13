@@ -61,7 +61,7 @@ def request(messages, seed):
 
 
 PYTHON_TOOL = [{"type": "function", "function": {
-    "name": "python_calculate", "description": "Run a calculation in an isolated Python interpreter. No scripts are created.",
+    "name": "python_calculate", "description": "Run a short Python calculation in an isolated in-memory interpreter. No files, network, subprocesses or persistent variables; print results. Scripts are not saved to disk.",
     "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}}}]
 
 
@@ -212,8 +212,8 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (KeyError, OSError, ValueError, TimeoutError, RuntimeError, json.JSONDecodeError) as error:
-        message = str(error).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+    except (KeyError, OSError, ValueError, TypeError, IndexError, TimeoutError, RuntimeError, subprocess.SubprocessError) as error:
+        message = (type(error).__name__ + ': ' + str(error)).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
         print(f'::error title=Candidate screening error::{message}', flush=True)
         print(f'Candidate screening error: {error}', file=sys.stderr, flush=True)
         sys.exit(1)

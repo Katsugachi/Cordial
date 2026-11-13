@@ -445,10 +445,14 @@ impl ToolRuntime {
                 }
                 let code = code.to_owned();
                 match tokio::task::spawn_blocking(move || python.run(&code)).await {
-                    Ok(Ok(output)) => ToolOutcome::ok(
-                        "Python calculation completed",
-                        format!("Python output:\n{output}\nNo script file was created."),
-                    ),
+                    Ok(Ok(output)) => {
+                        let text = if output.trim().is_empty() {
+                            "Python completed but produced no visible output. Use print(...) to display results; each calculation starts with fresh state. No script file was created.".to_string()
+                        } else {
+                            format!("Python output:\n{output}\nNo script file was created.")
+                        };
+                        ToolOutcome::ok("Python calculation completed", text)
+                    }
                     Ok(Err(error)) => {
                         ToolOutcome::fail("Python calculation failed", format!("Error: {error}"))
                     }

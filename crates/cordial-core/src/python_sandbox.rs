@@ -240,6 +240,18 @@ mod tests {
         let outcome = executor.block_on(runtime.execute(&call));
         assert!(outcome.ok, "{}", outcome.text);
         assert!(outcome.text.contains("42"));
+        let silent = crate::session::ToolCall {
+            id: "silent".into(),
+            name: "python_calculate".into(),
+            arguments: vec![crate::session::ToolArgument {
+                name: "code".into(),
+                value: "value = 6 * 7\nvalue".into(),
+            }],
+        };
+        let no_output = executor.block_on(runtime.execute(&silent));
+        assert!(no_output.ok);
+        assert!(no_output.text.contains("produced no visible output"));
+        assert!(no_output.text.contains("print("));
         let lazy = crate::tools::ToolRuntime::new(
             root.clone(),
             root.join("scratch"),
