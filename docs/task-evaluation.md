@@ -312,3 +312,11 @@ been strengthened, but still cannot establish semantic correctness. The
 candidate failed the screening and has not been selected for Cordial.
 Subsequent isolated-region diagnostics are not representative of the normal
 full-page desktop path and do not satisfy the Python or research requirements.
+
+In [run 43434156847](https://github.com/Katsugachi/Cordial/actions/runs/43434156847),
+the same candidate again misread the full-page cone diameter and made a false
+First Folio claim. With separate overlapping regions, it calculated the cone
+as 75.40 cm² but incorrectly described the formula as excluding the base; the
+rod answer was correct; the cube used the right symbolic formula but gave
+94.868 cm³ instead of 98.534 cm³. No Python or research tools were available.
+The standalone screens are not a substitute for an integrated agent evaluation.

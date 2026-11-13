@@ -443,12 +443,16 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       contains(github.event.head_commit.message, '[candidate-model]')
     runs-on: instabox-medium
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cordial-python-sandbox
       - name: Check diagnostic screen
         run: python3 scripts/ci/test_candidate_model_eval.py
       - name: Build pinned llama-server
@@ -481,14 +485,18 @@ jobs:
             npm --prefix ui test -- --run tests/pdf.test.ts
           node --test scripts/ci/test_pdf_crops.mjs
           node scripts/ci/pdf_crops.mjs "$RUNNER_TEMP/worksheet.png" "$RUNNER_TEMP/candidate-region"
-      - name: Screen candidate model without tools
-        timeout-minutes: 90
+      - name: Build isolated calculator bridge
+        run: cargo build --locked -p cordial-core --features sandbox-python --example candidate_python
+      - name: Screen candidate and Python tool use
+        timeout-minutes: 120
         env:
           CANDIDATE_SERVER: ${{ runner.temp }}/llama-build/bin/llama-server
           CANDIDATE_WEIGHTS: ${{ runner.temp }}/candidate.gguf
           CANDIDATE_PROJECTOR: ${{ runner.temp }}/candidate-mmproj.gguf
           CANDIDATE_SERVER_LOG: ${{ runner.temp }}/candidate-server.log
           CANDIDATE_REPORT_PATH: ${{ runner.temp }}/candidate-report.jsonl
+          CANDIDATE_PYTHON_BRIDGE: ${{ github.workspace }}/target/debug/examples/candidate_python
+          CORDIAL_TEST_PYTHON_WASM: ${{ github.workspace }}/ui/node_modules/@antonz/python-wasi/dist/python.wasm
           CANDIDATE_REGION_PREFIX: ${{ runner.temp }}/candidate-region
           CORDIAL_PDF_PAGE_IMAGE: ${{ runner.temp }}/worksheet.png
           CORDIAL_PDF_PAGE_TEXT: ${{ runner.temp }}/worksheet.txt

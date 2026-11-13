@@ -38,3 +38,7 @@ wasmtime-wasi = { version = "=36.0.19", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
+
+[[example]]
+name = "candidate_python"
+required-features = ["sandbox-python"]
