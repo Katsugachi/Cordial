@@ -150,7 +150,7 @@ def main():
                     time.sleep(2)
             else:
                 raise TimeoutError('llama-server did not become ready')
-            print(f'EVAL candidate Qwen3-VL-4B Q4_K_M, seed={seed}, context=8192, tools=none', flush=True)
+            print(f"EVAL candidate {os.environ.get('CANDIDATE_MODEL_LABEL', 'unknown')} Q4_K_M, seed={seed}, context=8192, initial screens have no tools", flush=True)
             questions = [
                 ('pdf', [{'type': 'text', 'text': 'Complete each question in the worksheet image and explain your reasoning. Extracted text follows; diagrams may contain additional labels:\n' + text},
                          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(image).decode()}}], pdf_screen),
@@ -212,7 +212,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (KeyError, OSError, ValueError, TypeError, IndexError, TimeoutError, RuntimeError, subprocess.SubprocessError) as error:
+    except Exception as error:
         message = (type(error).__name__ + ': ' + str(error)).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
         print(f'::error title=Candidate screening error::{message}', flush=True)
         print(f'Candidate screening error: {error}', file=sys.stderr, flush=True)

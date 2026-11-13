@@ -339,3 +339,13 @@ correct assumptions. The calculator now explicitly says when output is empty
 and advises `print`, while retaining the truthful success status and fresh-state
 semantics. This is an experimentally motivated correction, not a guarantee that
 models will use the result correctly.
+
+[Run 43442693090](https://github.com/Katsugachi/Cordial/actions/runs/43442693090)
+retested after the empty-output feedback. The candidate still submitted bare
+expressions (including a cone radius of 6 cm) despite the new feedback and did
+not produce an assessable final Python-assisted answer. The original 2B model
+also failed the PDF: it gave cone 103.67 cm², rejected the rod based on the
+base diagonal, and gave cube 512 cm³. On architecture, it gave 2 packs and
+$96 where the key was 165 packs and $7,920; English exhausted its tool budget.
+Ordinary Rust, sandbox, UI, inference and desktop checks passed. This does not
+show an improvement in task accuracy.
